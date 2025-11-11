@@ -1,0 +1,4 @@
+ollama_data/
+webui/
+.env
+data/
