@@ -1,99 +1,117 @@
-# PRewrite-style PPO Training with TRL
+# PRewrite PPO Rewriter (TRL v0.25.0)
 
-This repo sketches a minimal implementation of the PRewrite algorithm (Prompt Rewriting with Reinforcement Learning) using Hugging Face TRL's PPOTrainer.
+Minimal reinforcement learning setup to train an instruction rewriter (PRewrite) with PPO using Hugging Face TRL.
 
-- Paper: PRewrite — https://arxiv.org/abs/2401.08189 (PDF: https://arxiv.org/pdf/2401.08189)
-- TRL docs (v0.25.0): https://huggingface.co/docs/trl/v0.25.0/en/ppo_trainer#trl.PPOTrainer
+Paper: PRewrite — https://arxiv.org/abs/2401.08189  
+TRL Docs: https://huggingface.co/docs/trl/v0.25.0/en/ppo_trainer
 
-## What’s included
+## Components
 
-- `datasets.py` — JSONL-backed dataset utilities and meta-prompt helpers
-- `finetune.py` — PPO training loop for a rewriter policy (LLM) that outputs rewritten instructions
-- `inference.py` — Run PRewrite-I (greedy) or PRewrite-S (search) against the finetuned rewriter
-- `requirements.txt` — Python dependencies
+- `load_datasets.py` – Defines `PRewriteDataset`, `RewriteExample`, meta prompt helpers (`build_meta_prompt`, `format_rewriter_query`). The dataset reads a JSONL or Parquet source and yields examples via `iter()`. Each example must have at least: `instruction`, `input`, `output`. Optional: `task` ("qa", "math", "classification"), `template`.
+- `finetune.py` – New wrapper `PRewritePPOTrainer` builds a `PPOConfig` internally from kwargs; performs rollouts, evaluates with an external task model, and calls `ppo.step`.
+- `inference.py` – Utilities for running inference with Ollama (warming models, generation) and can be extended to perform greedy or search-based rewrite evaluation.
+- `run.ipynb` – Example notebook showing dataset loading, model loading, evaluator creation, and a demo training loop.
 
-## How it maps to the paper
+## Data Format
 
-- Rewriter LLM (policy): any HF CausalLM you choose via `--base_model` (PaLM2 in paper; use your preferred open model)
-- Task LLM (frozen, black-box):
-  - `--task_backend ollama --task_model <name>` — uses local Ollama HTTP API to query a frozen model at temperature 0
-  - `--task_backend hf --task_model <hf-id>` — uses a HF pipeline locally (optional fallback)
-- Reward: compares the task LLM’s output to ground-truth using a simple metric (F1 for QA/Math; EM for classification)
-- RL: PPO with KL constraint (via TRL PPOTrainer)
-- Inference: PRewrite-I (greedy) and PRewrite-S (search over K candidates with optional dev-set scoring via Ollama)
+Each training example (JSONL line or Parquet row):
+```jsonc
+{
+  "instruction": "Rewrite to focus on reasoning",
+  "input": "If John has 3 apples and buys 2 more, how many apples does he have?",
+  "output": "5",
+  "task": "math"
+}
+```
+Fields:
+- `instruction`: original (possibly suboptimal) instruction.
+- `input`: task-specific input text.
+- `output`: ground-truth answer or label.
+- `task` (optional): drives reward metric selection (math→numeric, qa→F1 token, else exact).
+- `template` (optional): overrides meta prompt formatting per example.
 
-## Quickstart (Windows PowerShell)
+## Training (Windows PowerShell)
 
-1) Create and activate a Python environment (recommended)
-
+1. Environment & dependencies:
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-2) Install dependencies
-
-```powershell
+./.venv/Scripts/Activate.ps1
 pip install -r requirements.txt
 ```
 
-3) Prepare a small training JSONL (one object per line):
+2. Ensure a task model is available:
+   - Ollama: install, run `ollama serve`, pull a model (e.g. `ollama pull gemma3:4b`).
+   - Or use HF local pipeline with `--task_backend hf`.
 
-```json
-{"instruction": "Answer the question", "input": "Who is the president of the United States?", "output": "Joe Biden", "task": "qa"}
-{"instruction": "Classify the sentiment", "input": "This was awesome!", "output": "positive", "task": "classification"}
+3. Run PPO training (toy example):
+```powershell
+python finetune.py ^
+  --dataset data/train.jsonl ^
+  --output_dir runs/rewriter-ppo ^
+  --base_model gpt2 ^
+  --task_backend ollama ^
+  --task_model gemma3:4b ^
+  --max_steps 50 ^
+  --learning_rate 5e-6 ^
+  --kl_coef 0.02
 ```
 
-Save it as `data/train.jsonl`.
+Internally this constructs `PPOConfig(learning_rate=5e-6, kl_coef=0.02, ...)` and performs rollouts+updates.
 
-4) Ensure a frozen task LLM is available
-- Ollama: install and run `ollama serve` (https://ollama.com/), pull a model (e.g., `ollama pull llama3`) and note its name.
+## Using the Notebook (`run.ipynb`)
 
-5) Train the rewriter with PPO (toy demo config)
+The notebook cell now instantiates:
+```python
+trainer = PRewritePPOTrainer(
+    base_model=base_model_local,
+    evaluator=evaluator,
+    meta_family="generic",
+    log_dir="runs/PRrewrite",
+    learning_rate=5e-6,
+    per_device_train_batch_size=1,
+    gradient_accumulation_steps=1,
+    num_ppo_epochs=1,
+    kl_coef=0.02,
+    seed=42,
+)
+```
+No `PPOConfig` object is passed—arguments are folded into one automatically.
+
+## Inference (basic generation)
 
 ```powershell
-python finetune.py --dataset data/train.jsonl --output_dir runs/rewriter-ppo --base_model gpt2 --task_backend ollama --task_model llama3:latest --max_steps 50
+python inference.py --model_dir runs/rewriter-ppo --instruction "Improve reasoning for addition" --strategy I
 ```
 
-Notes:
-- `gpt2` is a tiny demo model. For quality, use an instruction-tuned model that fits your hardware.
-- PPO settings are intentionally small; increase for real runs.
+Extend `inference.py` to implement PRewrite-S (search over K rewrites) scoring them via dev set examples and picking the highest-reward one.
 
-6) Run inference (PRewrite-I)
+## Reward Metrics
 
-```powershell
-python inference.py --model_dir runs/rewriter-ppo --instruction "Answer the question" --strategy I
-```
+Selected automatically by `compute_reward`:
+- math: numeric match (last number extraction)
+- qa: token-level F1
+- classification / other: exact match
+- optional BLEU via `--reward_mode bleu`
 
-7) Run search (PRewrite-S) with optional dev-set scoring via Ollama
+## PPO Hyperparameters (key)
+- `learning_rate`: optimizer LR
+- `kl_coef`: KL penalty between policy and reference
+- `num_ppo_epochs`: PPO epochs per batch
+- `gradient_accumulation_steps`: accumulation for memory-saving
+- `per_device_train_batch_size`: effective batch per device
 
-```powershell
-python inference.py --model_dir runs/rewriter-ppo --instruction "Answer the question" --strategy S --K 10 --dev_path data/dev.jsonl --task_model llama3:latest
-```
-
-## Data format
-
-`datasets.py` expects JSONL with fields:
-- `instruction`: the under-optimized instruction t
-- `input`: the task input x (text)
-- `output`: the ground truth y
-- `task` (optional): one of `qa`, `classification`, `math` (default `qa`)
-- `template` (optional): overrides default template for the task
-
-## Implementation notes & tips
-
-- Rewards: paper finds the final task metric works; F1 tends to be more stable; perplexity can be harmful unless combined with F1 (see Appendix D).
-- Temperatures: during RL, policy/value use temperature=1.0 for exploration; task LLM is queried at temperature=0.
-- Dev-set convergence: stop training based on dev set performance (not implemented here; you can extend `finetune.py`).
-- Cost/latency: PPO with a black-box task LLM can be API-expensive. Cache task LLM outputs if possible.
-- Ollama deploy: If you want to serve the finetuned rewriter via Ollama, you’ll need to convert and package the HF model into an Ollama model (GGUF + Modelfile). That conversion is outside the scope of this minimal example.
+Tune these for larger models; defaults are for quick smoke tests.
 
 ## Troubleshooting
+- Missing pad token → wrapper sets pad to EOS.
+- Out of memory → lower batch size or increase accumulation steps.
+- Sparse rewards → consider `whiten_rewards=True`.
+- Slow task model responses → cache evaluator outputs.
 
-- Transformers / Torch versions: use `pip install --upgrade pip` if you hit resolution issues.
-- GPU not used: add `accelerate config` and launch with `accelerate launch finetune.py ...` for multi-GPU.
-- Long generation: lower `max_new_tokens`.
+## Next Extensions
+- Integrate learned reward model (replace ZeroRewardAdapter).
+- Add PEFT/LoRA (`peft_config`) for efficient fine-tuning.
+- Implement dev-set stopping criteria.
 
 ## License
-
-This code is provided as a minimal example. Paper content is CC BY 4.0 (see arXiv page).
+Example code under permissive terms; consult original paper licensing for content reuse.

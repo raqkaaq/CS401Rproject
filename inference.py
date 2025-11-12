@@ -94,6 +94,8 @@ class OllamaClient:
         }
         r = requests.post(f"{self.base_url}/api/generate", json=payload, timeout=self.timeout)
         r.raise_for_status()
+        #print raw response
+        print(r.text)
         return r.json().get("response", "")
 
     def embeddings(self, model: str, inputs: List[str]) -> dict:
