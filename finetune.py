@@ -57,11 +57,11 @@ def load_from_hf(model_id: str):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLMWithValueHead.from_pretrained(local_dir)
-    ref_model = deepcopy(model.get_base_model())
+    ref_model = deepcopy(model)
     #freeze the reference model
     for param in ref_model.parameters():
         param.requires_grad = False
-    return tokenizer, model, ref_model
+    return tokenizer, model.to("cuda"), ref_model.to("cuda")
 
 # ---------------- Reward helpers -----------------
 # Calculates the reward for each prediction based on the example and the chosen reward mode.
