@@ -22,7 +22,12 @@ from load_datasets import (
     format_rewriter_query,
 )
 
-# ---------------- HF loading helper (restored) -----------------
+from inference import OllamaClient
+import re
+
+
+# ---------------- HF loading helper -----------------
+# This loads model_id from Hugging face and saves it locally.
 def load_from_hf(model_id: str, save_to: Optional[str] = None, trust_remote_code: bool = True):
     """Load model & tokenizer from Hugging Face hub or local path; optionally persist locally.
 
@@ -46,105 +51,129 @@ def load_from_hf(model_id: str, save_to: Optional[str] = None, trust_remote_code
     return tok, mdl
 
 # ---------------- Reward helpers -----------------
-def _norm(s: str) -> str:
-    return " ".join(s.strip().lower().split())
+# Calculates the reward for each prediction based on the example and the chosen reward mode.
+# Supports exact match, token-level F1, BLEU score, and math answer matching.
+class RewardComputer:
+    def __init__(self, mode: str = "auto"):
+        self.mode = mode.lower() if mode else "auto"
 
-def exact_match(pred: str, gold: str) -> float:
-    return 1.0 if _norm(pred) == _norm(gold) else 0.0
+    @staticmethod
+    def _norm(s: str) -> str:
+        return " ".join(s.strip().lower().split())
 
-def token_f1(pred: str, gold: str) -> float:
-    p = _norm(pred).split(); g = _norm(gold).split()
-    if not p and not g: return 1.0
-    if not p or not g: return 0.0
-    common = 0; g_counts = {}
-    for t in g: g_counts[t] = g_counts.get(t, 0) + 1
-    for t in p:
-        if g_counts.get(t, 0) > 0:
-            common += 1; g_counts[t] -= 1
-    precision = common / max(len(p),1); recall = common / max(len(g),1)
-    if precision + recall == 0: return 0.0
-    return 2*precision*recall/(precision+recall)
+    # Exact match reward: 1 if normalized strings match, else 0, probably not useful
+    def exact_match(self, pred: str, gold: str) -> float:
+        return 1.0 if self._norm(pred) == self._norm(gold) else 0.0
 
-import re
-def _extract_last_number(s: str) -> Optional[str]:
-    if not isinstance(s,str): return None
-    m = re.search(r"####\s*([-+]?[0-9]+\.?[0-9]*)", s)
-    if m: return m.group(1)
-    nums = re.findall(r"[-+]?[0-9]+\.?[0-9]*", s)
-    return nums[-1] if nums else None
+    #f1 is always normalized
+    def token_f1(self, pred: str, gold: str) -> float:
+        p = self._norm(pred).split(); g = self._norm(gold).split()
+        if not p and not g: return 1.0
+        if not p or not g: return 0.0
+        common = 0; g_counts = {}
+        for t in g: g_counts[t] = g_counts.get(t, 0) + 1
+        for t in p:
+            if g_counts.get(t, 0) > 0:
+                common += 1; g_counts[t] -= 1
+        precision = common / max(len(p),1); recall = common / max(len(g),1)
+        if precision + recall == 0: return 0.0
+        return 2*precision*recall/(precision+recall)
 
-def math_reward(pred: str, gold: str) -> float:
-    pnum = _extract_last_number(pred); gnum = _extract_last_number(gold)
-    if pnum is not None and gnum is not None:
-        try:
-            if "." in pnum or "." in gnum: return 1.0 if float(pnum)==float(gnum) else 0.0
-            return 1.0 if int(pnum)==int(gnum) else 0.0
-        except Exception:
-            return 1.0 if pnum==gnum else 0.0
-    return exact_match(pred,gold)
+    @staticmethod
+    def _extract_last_number(s: str) -> Optional[str]:
+        if not isinstance(s,str): return None
+        # Check for "#### number" pattern first, all the GSM8K answers are in this format
+        m = re.search(r"####\s*([-+]?[0-9]+\.?[0-9]*)", s)
+        if m: return m.group(1)
+        nums = re.findall(r"[-+]?[0-9]+\.?[0-9]*", s)
+        return nums[-1] if nums  else None
 
-def bleu_score(pred: str, gold: str, max_n: int = 4, smooth: bool = True) -> float:
-    from collections import Counter; import math
-    if not isinstance(pred,str) or not isinstance(gold,str): return 0.0
-    ref = gold.strip().split(); hyp = pred.strip().split()
-    if not ref or not hyp: return 0.0
-    def ngrams(tokens,n): return [tuple(tokens[i:i+n]) for i in range(len(tokens)-n+1)]
-    precisions = []
-    for n in range(1,max_n+1):
-        r_ngrams = Counter(ngrams(ref,n)); h_ngrams = Counter(ngrams(hyp,n))
-        if not h_ngrams: precisions.append(0.0); continue
-        overlap = sum(min(cnt, r_ngrams.get(ng,0)) for ng,cnt in h_ngrams.items())
-        if smooth: overlap += 1; denom = sum(h_ngrams.values())+1
-        else: denom = sum(h_ngrams.values())
-        precisions.append(overlap/denom)
-    geo = 0.0 if min(precisions)==0 else math.exp(sum(math.log(p) for p in precisions)/len(precisions))
-    ref_len=len(ref); hyp_len=len(hyp)
-    if hyp_len==0: bp=0.0
-    elif hyp_len>ref_len: bp=1.0
-    else: bp=math.exp(1 - float(ref_len)/float(hyp_len))
-    return float(bp*geo)
+    #reward is 1 if the last number matches, else 0
+    def math_reward(self, pred: str, gold: str) -> float:
+        pnum = self._extract_last_number(pred); gnum = self._extract_last_number(gold)
+        if pnum is not None and gnum is not None:
+            try:
+                if "." in pnum or "." in gnum: return 1.0 if float(pnum)==float(gnum) else 0.0
+                return 1.0 if int(pnum)==int(gnum) else 0.0
+            except Exception:
+                return 1.0 if pnum==gnum else 0.0
+        return self.exact_match(pred, gold)
 
-def compute_reward(example: RewriteExample, pred: str, mode: str = "auto") -> float:
-    m = (mode or "auto").lower()
-    if m=="f1": return token_f1(pred, example.output)
-    if m=="bleu": return bleu_score(pred, example.output)
-    if m=="math": return math_reward(pred, example.output)
-    if m=="exact": return exact_match(pred, example.output)
-    if getattr(example,"task",None)=="math": return math_reward(pred, example.output)
-    if getattr(example,"task",None)=="qa": return token_f1(pred, example.output)
-    return exact_match(pred, example.output)
+    @staticmethod
+    def ngrams(tokens: List[str], n: int) -> List[Tuple[str, ...]]:
+        return [tuple(tokens[i:i+n]) for i in range(len(tokens)-n+1)]
+
+    #Vibe Coded bleu_score, already normalized
+    def bleu_score(self, pred: str, gold: str, max_n: int = 4, smooth: bool = True) -> float:
+        from collections import Counter
+        import math
+        if not isinstance(pred, str) or not isinstance(gold, str):
+            return 0.0
+        ref = gold.strip().split()
+        hyp = pred.strip().split()
+        if not ref or not hyp:
+            return 0.0
+        precisions = []
+        for n in range(1, max_n+1):
+            r_ngrams = Counter(self.ngrams(ref, n))
+            h_ngrams = Counter(self.ngrams(hyp, n))
+            if not h_ngrams:
+                precisions.append(0.0)
+                continue
+            overlap = sum(min(cnt, r_ngrams.get(ng, 0)) for ng, cnt in h_ngrams.items())
+            if smooth and overlap == 0:
+                overlap += 1
+                denom = sum(h_ngrams.values()) + 1
+            else:
+                denom = sum(h_ngrams.values())
+            precisions.append(overlap / denom)
+        geo = 0.0 if min(precisions) == 0 else math.exp(sum(math.log(p) for p in precisions) / len(precisions))
+        ref_len = len(ref)
+        hyp_len = len(hyp)
+        if hyp_len == 0:
+            bp = 0.0
+        elif hyp_len > ref_len:
+            bp = 1.0
+        else:
+            bp = math.exp(1 - float(ref_len) / float(hyp_len))
+        return float(bp * geo)
+
+    #this is the main reward function to calculate the value of a particular prediction
+    def compute_reward(self, example: RewriteExample, pred: str, mode: str = "auto") -> float:
+        m = (mode or "auto").lower()
+        gold = example.output
+        if m=="f1": return self.token_f1(pred, gold)
+        if m=="bleu": return self.bleu_score(pred, gold)
+        if m=="math": return self.math_reward(pred, gold)
+        if m=="exact": return self.exact_match(pred, gold)
+        if getattr(example,"task",None)=="math": return self.math_reward(pred, gold)
+        if getattr(example,"task",None)=="qa": return self.token_f1(pred, gold)
+        return self.exact_match(pred, gold)
 
 # ---------------- Evaluators -----------------
+# this is how the Trainer should interact with the reward computer, it calls the evaluator, then calculates the reward
 class BaseTaskEvaluator:
-    def __init__(self, reward_mode: str = "auto") -> None: self.reward_mode = reward_mode
+    def __init__(self, reward_mode: str = "auto") -> None: 
+        self.reward_mode = reward_mode
+        self.reward_computer = RewardComputer(reward_mode)
     def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 256) -> str: raise NotImplementedError
     def score(self, example: RewriteExample, rewritten_instruction: str) -> float:
         task_prompt = example.build_task_prompt(rewritten_instruction)
         out = self.generate(task_prompt, temperature=0.0)
-        return compute_reward(example, out, self.reward_mode)
+        return self.reward_computer.compute_reward(example, out, self.reward_mode)
 
 class OllamaTaskEvaluator(BaseTaskEvaluator):
-    def __init__(self, model: str, host: str = "http://localhost:11434", reward_mode: str = "auto"):
-        super().__init__(reward_mode); self.model=model; self.base_url=host.rstrip("/")
-        try: import requests  # noqa
-        except Exception as e: raise RuntimeError("Install requests for Ollama evaluator") from e
-    def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 256) -> str:
-        import requests
-        payload={"model":self.model,"prompt":prompt,"stream":False,"options":{"temperature":float(temperature),"num_predict":int(max_tokens)}}
-        r=requests.post(f"{self.base_url}/api/generate", json=payload, timeout=180); r.raise_for_status(); return r.json().get("response","")
-
-class HFTaskEvaluator(BaseTaskEvaluator):
-    def __init__(self, model_name: str, reward_mode: str = "auto"):
-        super().__init__(reward_mode)
-        from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-        tok=AutoTokenizer.from_pretrained(model_name)
-        pipe=pipeline("text-generation", model=AutoModelForCausalLM.from_pretrained(model_name), tokenizer=tok, device_map="auto")
-        self._tok=tok; self._pipe=pipe
-    def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 256) -> str:
-        out=self._pipe(prompt, do_sample=temperature>0.0, temperature=temperature, max_new_tokens=max_tokens)
-        return out[0]["generated_text"][len(prompt):]
+    def __init__(self, model: str, client: OllamaClient, reward_mode: str = "auto"):
+        def __init__(self):
+            super().__init__(reward_mode)
+            self.model=model
+            self.client=client
+            self.client.warmup_model(model)
+        def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 256) -> str:
+            return self.client.generate(self.model, prompt, temperature=temperature, max_tokens=max_tokens)
 
 # ---------------- PPO Wrapper -----------------
+#I think this is buggy, havent gotten around to fix it yet.
 class PRewritePPOTrainer:
     DEFAULT_PPO_ARGS = dict(
         learning_rate=5e-6,
@@ -322,56 +351,3 @@ class PRewritePPOTrainer:
         if self.writer:
             try: self.writer.flush(); self.writer.close()
             except Exception: pass
-
-# ---------------- CLI -----------------
-def parse_args() -> argparse.Namespace:
-    ap=argparse.ArgumentParser(description="PRewrite PPO Finetuning")
-    ap.add_argument("--dataset", required=True)
-    ap.add_argument("--output_dir", required=True)
-    ap.add_argument("--base_model", required=True)
-    ap.add_argument("--task_backend", choices=["ollama","hf"], default="ollama")
-    ap.add_argument("--task_model", required=True)
-    ap.add_argument("--reward_mode", choices=["auto","f1","math","exact","bleu"], default="auto")
-    ap.add_argument("--dev_frac", type=float, default=0.0)
-    ap.add_argument("--max_steps", type=int, default=200)
-    ap.add_argument("--log_dir", default="runs/PRewritePPO")
-    # PPO overrides
-    ap.add_argument("--learning_rate", type=float, default=5e-6)
-    ap.add_argument("--per_device_train_batch_size", type=int, default=1)
-    ap.add_argument("--gradient_accumulation_steps", type=int, default=1)
-    ap.add_argument("--num_ppo_epochs", type=int, default=1)
-    ap.add_argument("--kl_coef", type=float, default=0.02)
-    ap.add_argument("--cliprange", type=float, default=0.2)
-    ap.add_argument("--cliprange_value", type=float, default=0.2)
-    ap.add_argument("--vf_coef", type=float, default=0.1)
-    ap.add_argument("--whiten_rewards", action="store_true")
-    ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--meta_family", default="generic")
-    return ap.parse_args()
-
-def main():
-    args=parse_args()
-    evaluator = OllamaTaskEvaluator(model=args.task_model, reward_mode=args.reward_mode) if args.task_backend=="ollama" else HFTaskEvaluator(model_name=args.task_model, reward_mode=args.reward_mode)
-    ds=PRewriteDataset(args.dataset, split="train", dev_fraction=args.dev_frac, seed=args.seed)
-    trainer=PRewritePPOTrainer(
-        base_model=args.base_model,
-        evaluator=evaluator,
-        meta_family=args.meta_family,
-        log_dir=args.log_dir,
-        learning_rate=args.learning_rate,
-        per_device_train_batch_size=args.per_device_train_batch_size,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        num_ppo_epochs=args.num_ppo_epochs,
-        kl_coef=args.kl_coef,
-        cliprange=args.cliprange,
-        cliprange_value=args.cliprange_value,
-        vf_coef=args.vf_coef,
-        whiten_rewards=args.whiten_rewards,
-        seed=args.seed,
-    )
-    trainer.train(ds, max_steps=args.max_steps, log_every=10)
-    os.makedirs(args.output_dir, exist_ok=True)
-    trainer.save(args.output_dir)
-
-if __name__ == "__main__":
-    main()

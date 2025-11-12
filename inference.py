@@ -71,7 +71,7 @@ class OllamaClient:
         r = requests.post(f"{self.base_url}/api/pull", json=payload, timeout=self.timeout)
         r.raise_for_status()
         return r.json()
-
+    #this loads the model into memory, so call it before training
     def warmup_model(self, model: str) -> dict:
         payload = {
             "model": model,
@@ -80,7 +80,9 @@ class OllamaClient:
         r.raise_for_status()
         if r.status_code == 200:
             print(f"Model {model} warmed up successfully.")
-    
+        else:
+            raise RuntimeError(f"Failed to warm up model {model}: {r.status_code} {r.text}")
+    #this is the main method for inference
     def generate(self, model: str, prompt: str, temperature: float = 0.0, max_tokens: int = 256) -> str:#, thinking=True) -> str:
         # if not thinking and "qwen" in model.lower():
         #     # Add a clear separator for the model
@@ -97,7 +99,7 @@ class OllamaClient:
         #print raw response
         print(r.text)
         return r.json().get("response", "")
-
+    #might use this?
     def embeddings(self, model: str, inputs: List[str]) -> dict:
         """Call the embeddings endpoint and return raw JSON.
 
@@ -108,30 +110,3 @@ class OllamaClient:
         r = requests.post(f"{self.base_url}/api/embeddings", json=payload, timeout=self.timeout)
         r.raise_for_status()
         return r.json()
-
-
-def _cli():
-    ap = argparse.ArgumentParser(description="Minimal Ollama client: list models, generate text")
-    ap.add_argument("--base_url", default="http://localhost:11434")
-    ap.add_argument("--list", action="store_true", help="List models on Ollama server")
-    ap.add_argument("--generate", action="store_true", help="Run generation")
-    ap.add_argument("--model", help="Model name for generation (required with --generate)")
-    ap.add_argument("--prompt", help="Prompt text for generation (required with --generate)")
-    ap.add_argument("--temp", type=float, default=0.0, help="Sampling temperature")
-    ap.add_argument("--max_tokens", type=int, default=256, help="Max tokens to generate")
-    args = ap.parse_args()
-
-    client = OllamaClient(base_url=args.base_url)
-    if args.list:
-        models = client.list_models()
-        print(models)
-        return
-    if args.generate:
-        if not args.model or not args.prompt:
-            raise SystemExit("--model and --prompt are required with --generate")
-        out = client.generate(args.model, args.prompt, temperature=args.temp, max_tokens=args.max_tokens)
-        print(out)
-
-
-if __name__ == "__main__":
-    _cli()
