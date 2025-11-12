@@ -14,6 +14,7 @@ from typing import Optional, Any, List, Tuple
 from transformers import AutoTokenizer
 from torch.utils.tensorboard import SummaryWriter
 from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead, AutoTokenizer
+from copy import deepcopy
 
 from load_datasets import (
     PRewriteDataset,
@@ -31,23 +32,21 @@ import re
 def load_from_hf(model_id: str, save_to: Optional[str] = None, trust_remote_code: bool = True):
     """Load model & tokenizer from Hugging Face hub or local path; optionally persist locally.
 
-    Returns (tokenizer, model) where model is an AutoModelForCausalLMWithValueHead instance.
+    Returns (tokenizer, model, ref_model) where model is an AutoModelForCausalLMWithValueHead instance.
+    Ref_model is a frozen copy of the base model without value head.
     This is useful for baseline SFT loading prior to PPO wrapping.
     """
-    if save_to and os.path.isdir(save_to):
-        try:
-            tok = AutoTokenizer.from_pretrained(save_to, trust_remote_code=trust_remote_code)
-            mdl = AutoModelForCausalLMWithValueHead.from_pretrained(save_to, trust_remote_code=trust_remote_code)
-            return tok, mdl
-        except Exception:
-            pass  # fallback to remote
-    tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    tok = AutoTokenizer.from_pretrained(model_id, use_fast=True, trust_remote_code=trust_remote_code)
     mdl = AutoModelForCausalLMWithValueHead.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    ref_mdl = deepcopy(mdl)
+    for param in ref_mdl.parameters():
+        param.requires_grad = False
     if save_to:
         os.makedirs(save_to, exist_ok=True)
         tok.save_pretrained(save_to)
         mdl.save_pretrained(save_to)
-    return tok, mdl
+        ref_mdl.save_pretrained(save_to)
+    return tok, mdl, ref_mdl
 
 # ---------------- Reward helpers -----------------
 # Calculates the reward for each prediction based on the example and the chosen reward mode.
