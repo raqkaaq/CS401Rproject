@@ -38,13 +38,21 @@ class OllamaClient:
             return True
         return False
 
+    def _parse_models(self, data: Any) -> List[Any]:
+        models = []
+        for item in data.get("models", []):
+            if isinstance(item, dict) and "name" in item:
+                size = item.get("details").get("parameter_size") if item.get("details") else None
+                models.append((item["name"], size))
+        return models
+
     def list_models(self) -> List[Any]:
         # try the documented /api/models, fall back to /api/tags
         for path in ("/api/models", "/api/tags"):
             try:
                 r = requests.get(f"{self.base_url}{path}", timeout=self.timeout)
                 r.raise_for_status()
-                return r.json()
+                return self._parse_models(r.json())
             except Exception:
                 continue
         raise RuntimeError("Unable to list models from Ollama server")
@@ -52,7 +60,7 @@ class OllamaClient:
     def list_running_models(self) -> List[Any]:
         r = requests.get(f"{self.base_url}/api/ps", timeout=self.timeout)
         r.raise_for_status()
-        return r.json()
+        return self._parse_models(r.json())
 
     def show_model(self, model: str, verbose: bool = False) -> dict:
         payload = {"model": model, "verbose": bool(verbose)}
@@ -70,7 +78,10 @@ class OllamaClient:
         payload = {"model": model}
         r = requests.post(f"{self.base_url}/api/pull", json=payload, timeout=self.timeout)
         r.raise_for_status()
-        return r.json()
+        if r.status_code == 200:
+            print(f"Model {model} downloaded successfully.")
+        else:
+            raise RuntimeError(f"Failed to download model {model}: {r.status_code} {r.text}")
     #this loads the model into memory, so call it before training
     def warmup_model(self, model: str) -> dict:
         payload = {
