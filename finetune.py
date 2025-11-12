@@ -13,7 +13,7 @@ from typing import Optional, Any, List, Tuple
 
 from transformers import AutoTokenizer
 from torch.utils.tensorboard import SummaryWriter
-from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead, AutoTokenizer
+from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead
 from copy import deepcopy
 
 from load_datasets import (
@@ -28,25 +28,40 @@ import re
 
 
 # ---------------- HF loading helper -----------------
+def download_model(model_id: str, local_dir: str) -> str:
+    """Download model from Hugging Face hub to local directory.
+
+    Returns the local directory path where the model is saved.
+    """
+    from huggingface_hub import snapshot_download
+    os.makedirs(local_dir, exist_ok=True)
+    snapshot_download(repo_id=model_id, local_dir=local_dir)
+    return local_dir
+
 # This loads model_id from Hugging face and saves it locally.
-def load_from_hf(model_id: str, save_to: Optional[str] = None, trust_remote_code: bool = True):
+def load_from_hf(model_id: str):
     """Load model & tokenizer from Hugging Face hub or local path; optionally persist locally.
 
     Returns (tokenizer, model, ref_model) where model is an AutoModelForCausalLMWithValueHead instance.
     Ref_model is a frozen copy of the base model without value head.
     This is useful for baseline SFT loading prior to PPO wrapping.
     """
-    tok = AutoTokenizer.from_pretrained(model_id, use_fast=True, trust_remote_code=trust_remote_code)
-    mdl = AutoModelForCausalLMWithValueHead.from_pretrained(model_id, trust_remote_code=trust_remote_code)
-    ref_mdl = deepcopy(mdl)
-    for param in ref_mdl.parameters():
+    #check if the model is downloaded locally already, recall models are saved as models/{owner}/{model_name}
+    local_dir = "models/" + model_id
+    if not os.path.exists(local_dir):
+        print(f"Downloading model {model_id} from Hugging Face hub...")
+        owner, model_name = model_id.split("/")
+        local_dir = download_model(model_id, f"models/{owner}/{model_name}", owner)
+    print(f"Loading model from local directory: {local_dir}")
+    tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    model = AutoModelForCausalLMWithValueHead.from_pretrained(local_dir)
+    ref_model = deepcopy(model.get_base_model())
+    #freeze the reference model
+    for param in ref_model.parameters():
         param.requires_grad = False
-    if save_to:
-        os.makedirs(save_to, exist_ok=True)
-        tok.save_pretrained(save_to)
-        mdl.save_pretrained(save_to)
-        ref_mdl.save_pretrained(save_to)
-    return tok, mdl, ref_mdl
+    return tokenizer, model, ref_model
 
 # ---------------- Reward helpers -----------------
 # Calculates the reward for each prediction based on the example and the chosen reward mode.
