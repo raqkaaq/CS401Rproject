@@ -39,7 +39,7 @@ def download_model(model_id: str, local_dir: str) -> str:
     return local_dir
 
 # This loads model_id from Hugging face and saves it locally.
-def load_from_hf(model_id: str):
+def load_from_hf(model_id: str) -> Tuple[Any, Any, Any]:
     """Load model & tokenizer from Hugging Face hub or local path; optionally persist locally.
 
     Returns (tokenizer, model, ref_model) where model is an AutoModelForCausalLMWithValueHead instance.
@@ -56,6 +56,7 @@ def load_from_hf(model_id: str):
     tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    #this needs to be a model with value head, otherwise you need a separate value model for PPOTrainer
     model = AutoModelForCausalLMWithValueHead.from_pretrained(local_dir)
     ref_model = deepcopy(model)
     #freeze the reference model
