@@ -13,7 +13,7 @@ from typing import Optional, Any, List, Tuple
 
 from transformers import AutoTokenizer
 from torch.utils.tensorboard import SummaryWriter
-from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead
+from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead, AutoTokenizer
 
 from load_datasets import (
     PRewriteDataset,
@@ -31,19 +31,18 @@ import re
 def load_from_hf(model_id: str, save_to: Optional[str] = None, trust_remote_code: bool = True):
     """Load model & tokenizer from Hugging Face hub or local path; optionally persist locally.
 
-    Returns (tokenizer, model) where model is an AutoModelForCausalLM (no value head).
+    Returns (tokenizer, model) where model is an AutoModelForCausalLMWithValueHead instance.
     This is useful for baseline SFT loading prior to PPO wrapping.
     """
-    from transformers import AutoTokenizer, AutoModelForCausalLM
     if save_to and os.path.isdir(save_to):
         try:
             tok = AutoTokenizer.from_pretrained(save_to, trust_remote_code=trust_remote_code)
-            mdl = AutoModelForCausalLM.from_pretrained(save_to, trust_remote_code=trust_remote_code)
+            mdl = AutoModelForCausalLMWithValueHead.from_pretrained(save_to, trust_remote_code=trust_remote_code)
             return tok, mdl
         except Exception:
             pass  # fallback to remote
     tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
-    mdl = AutoModelForCausalLM.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+    mdl = AutoModelForCausalLMWithValueHead.from_pretrained(model_id, trust_remote_code=trust_remote_code)
     if save_to:
         os.makedirs(save_to, exist_ok=True)
         tok.save_pretrained(save_to)
@@ -171,7 +170,7 @@ class OllamaTaskEvaluator(BaseTaskEvaluator):
             self.client.warmup_model(model)
         def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 256) -> str:
             return self.client.generate(self.model, prompt, temperature=temperature, max_tokens=max_tokens)
-
+        
 # ---------------- PPO Wrapper -----------------
 #I think this is buggy, havent gotten around to fix it yet.
 class PRewritePPOTrainer:
