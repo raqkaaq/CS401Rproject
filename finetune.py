@@ -12,25 +12,25 @@ import os
 from typing import Optional, Any, List, Tuple
 
 from transformers import AutoTokenizer
+from torch import nn
 from torch.utils.tensorboard import SummaryWriter
+import torch
 from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead
+from copy import deepcopy
 
 from load_datasets import (
     PRewriteDataset,
-    RewriteExample,
-    build_meta_prompt,
-    format_rewriter_query,
+    RewriteExample
 )
 
-from inference import OllamaClient
+from inference import OllamaClient, HFClient
 import re
-
 
 # ---------------- Reward helpers -----------------
 # Calculates the reward for each prediction based on the example and the chosen reward mode.
 # Supports exact match, token-level F1, BLEU score, and math answer matching.
 class RewardComputer:
-    def __init__(self, mode: str = "auto"):
+    def __init__(self, mode: str = "auto") -> None:
         self.mode = mode.lower() if mode else "auto"
 
     @staticmethod
@@ -126,204 +126,85 @@ class RewardComputer:
         if getattr(example,"task",None)=="qa": return self.token_f1(pred, gold)
         return self.exact_match(pred, gold)
 
+
 # ---------------- Evaluators -----------------
 # this is how the Trainer should interact with the reward computer, it calls the evaluator, then calculates the reward
 class BaseTaskEvaluator:
     def __init__(self, reward_mode: str = "auto") -> None: 
         self.reward_mode = reward_mode
         self.reward_computer = RewardComputer(reward_mode)
-    def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 256) -> str: raise NotImplementedError
+    def generate(self, prompt: str, max_tokens: int = 256) -> str: raise NotImplementedError
     def score(self, example: RewriteExample, rewritten_instruction: str) -> float:
         task_prompt = example.build_task_prompt(rewritten_instruction)
-        out = self.generate(task_prompt, temperature=0.0)
+        out = self.generate(task_prompt, max_tokens=256)
         return self.reward_computer.compute_reward(example, out, self.reward_mode)
 
 class OllamaTaskEvaluator(BaseTaskEvaluator):
     def __init__(self, model: str, client: OllamaClient, reward_mode: str = "auto"):
-        def __init__(self):
-            super().__init__(reward_mode)
-            self.model=model
-            self.client=client
-            self.client.warmup_model(model)
-        def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 256) -> str:
-            return self.client.generate(self.model, prompt, temperature=temperature, max_tokens=max_tokens)
-        
+        super().__init__(reward_mode)
+        self.model=model
+        self.client=client
+        self.client.warmup_model(model)
+    def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 256) -> str:
+        return self.client.generate(self.model, prompt, temperature=temperature, max_tokens=max_tokens)
+
+class HFTaskEvaluator(BaseTaskEvaluator):
+    def __init__(self, model: str, client: HFClient, reward_mode: str = "auto"):
+        super().__init__(reward_mode)
+        self.model=model
+        self.client=client
+        self.client.warmup_model(model)
+    def generate(self, prompt: str, max_tokens: int = 256) -> str:
+        return self.client.generate(self.model, prompt, max_new_tokens=max_tokens)
+
+# ---------------- Reward Model -----------------
+# Reward model that uses the evaluator to compute rewards for PPO training
+class RewardModel(nn.Module):
+    def __init__(self, evaluator: BaseTaskEvaluator, reward_mode: str = "auto", data: List[RewriteExample] = [], device: str = "cuda"):
+        super().__init__()
+        self.evaluator = evaluator
+        self.reward_mode = reward_mode
+        self.data = data
+        self.device = device
+
+    def forward(self, preds: List[str]) -> torch.Tensor:
+        rewards = []
+        for pred, example in zip(preds, self.data):
+            reward = self.evaluator.score(example, pred, self.reward_mode)
+            rewards.append(reward)
+        return torch.tensor(rewards, dtype=torch.float32).to(self.device)
+
 # ---------------- PPO Wrapper -----------------
 #I think this is buggy, havent gotten around to fix it yet.
-class PRewritePPOTrainer:
-    DEFAULT_PPO_ARGS = dict(
-        learning_rate=5e-6,
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=1,
-        num_ppo_epochs=1,
-        kl_coef=0.02,
-        cliprange=0.2,
-        cliprange_value=0.2,
-        vf_coef=0.1,
-        whiten_rewards=False,
-        seed=42,
-    )
-
-    def __init__(self, base_model: str, dataset: PRewriteDataset, evaluator: BaseTaskEvaluator, meta_family: str = "generic", log_dir: Optional[str] = None,
-                 load_dtype: Optional[str] = None, use_8bit: bool = False, **ppo_kwargs: Any) -> None:
-        """Construct the PPO trainer.
-
-        Parameters:
-        - base_model: path or model id for the policy/value model with value head
-        - dataset: PRewriteDataset (train split chosen by its constructor). Required up-front so we can
-                   pass a real dataset length to TRL (no lazy init surprises).
-        - evaluator: task evaluator instance providing reward signals
-        - meta_family: which meta prompt family to use
-        - log_dir: optional TensorBoard log directory
-        - **ppo_kwargs: overrides for PPOConfig (kl_coef, learning_rate, etc.)
-        """
-        self.evaluator=evaluator
-        self.dataset=dataset
-        self.meta_prompt=build_meta_prompt(meta_family)
-        cfg_dict={**self.DEFAULT_PPO_ARGS, **ppo_kwargs}
-        self.ppo_config=PPOConfig(**cfg_dict)
-        self.tokenizer=AutoTokenizer.from_pretrained(base_model, use_fast=True)
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token=self.tokenizer.eos_token
-        # Configure memory-saving load options
-        model_kwargs = {}
-        if load_dtype:
-            import torch
-            dtype_map = {
-                "fp16": torch.float16,
-                "bfloat16": torch.bfloat16,
-                "bf16": torch.bfloat16,
-                "fp32": torch.float32,
-            }
-            model_kwargs["torch_dtype"] = dtype_map.get(load_dtype.lower(), torch.float16)
-        if use_8bit:
-            model_kwargs["load_in_8bit"] = True
-        self.model=AutoModelForCausalLMWithValueHead.from_pretrained(base_model, **model_kwargs)
-        if not hasattr(self.model, "generation_config"):
-            self.model.generation_config=getattr(self.model,"config",None)
-        # Some underlying architectures or value-head wrappers may not expose base_model_prefix,
-        # but TRL/PPOTrainer relies on it for reference model creation and weight handling.
-        if not hasattr(self.model, "base_model_prefix"):
-            for cand in ["transformer", "model", "base_model"]:
-                if hasattr(self.model, cand):
-                    self.model.base_model_prefix = cand
-                    break
-            else:
-                # Fallback: use generic name; TRL will treat entire model as base
-                self.model.base_model_prefix = "model"
-        # Ensure attributes PPOTrainer probes (model/pretrained_model) exist.
-        # Try to discover an underlying submodule; if absent, reuse the wrapper itself.
-        # Try to identify an underlying module to expose, but avoid loading a second full model.
-        underlying = None
-        for cand in ["transformer", "base_model", "model"]:
-            if hasattr(self.model, cand):
-                underlying = getattr(self.model, cand)
-                break
-        # Avoid creating self-referential attributes that cause recursion.
-        if underlying is not None and underlying is not self.model:
-            if not hasattr(self.model, "model"):
-                self.model.model = underlying
-            if not hasattr(self.model, "pretrained_model"):
-                self.model.pretrained_model = underlying
-        # Provide gradient checkpointing interface expected by TRL if missing.
-        if not hasattr(self.model, "is_gradient_checkpointing"):
-            # Reuse underlying flag if present, else default False
-            base_flag = getattr(underlying, "is_gradient_checkpointing", False)
-            self.model.is_gradient_checkpointing = base_flag
-        if not hasattr(self.model, "gradient_checkpointing_enable"):
-            def _gc_enable(gradient_checkpointing_kwargs=None):
-                setattr(self.model, "is_gradient_checkpointing", True)
-                # forward to underlying if it implements the method
-                if hasattr(underlying, "gradient_checkpointing_enable"):
-                    try:
-                        underlying.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
-                    except TypeError:
-                        underlying.gradient_checkpointing_enable()
-            self.model.gradient_checkpointing_enable = _gc_enable
-        if not hasattr(self.model, "gradient_checkpointing_disable"):
-            def _gc_disable():
-                setattr(self.model, "is_gradient_checkpointing", False)
-                if hasattr(underlying, "gradient_checkpointing_disable"):
-                    underlying.gradient_checkpointing_disable()
-            self.model.gradient_checkpointing_disable = _gc_disable
-        import torch, torch.nn as nn
-        class ZeroRewardAdapter(nn.Module):
-            def forward(self, input_ids=None, **kwargs):
-                # Minimal stub: TRL expects a value for reward model forward shape alignment.
-                if input_ids is None:
-                    return torch.zeros((1,1), device=self.model.device)
-                return torch.zeros((input_ids.shape[0],1), device=self.model.device)
-        self._reward_model=ZeroRewardAdapter()
-
-        # Build a minimal dataset object that satisfies length; TRL still expects samples
-        from torch.utils.data import Dataset
-        df = self.dataset.get_split_df(self.dataset._requested_split)
-        length = len(df) if df is not None else 0
-        class _LengthOnlyDataset(Dataset):
-            def __init__(self, length: int): self.length=length
-            def __len__(self): return self.length
-            def __getitem__(self, idx):
-                import torch
-                return {"input_ids": torch.tensor([], dtype=torch.long)}
-        train_ds=_LengthOnlyDataset(length)
-        # Let TRL create the reference model automatically; explicitly pass value_model
-        # Provide a separate reference model to avoid internal cloning & recursion.
-        from transformers import AutoModelForCausalLM
-        ref_model = AutoModelForCausalLM.from_pretrained(base_model, **model_kwargs)
-        self.ppo=PPOTrainer(
-            args=self.ppo_config,
-            processing_class=self.tokenizer,
-            model=self.model,
-            ref_model=ref_model,
-            reward_model=self._reward_model,
-            value_model=self.model,
-            train_dataset=train_ds,
+class PRewriteTrainer:
+    def __init__(self, tokenizer, model, ref_model, dataset, task: str = "auto"):
+        self.reward_model = RewardModel(RewardComputer(mode=task), data=dataset)
+        ppo_config = PPOConfig(
+            exp_name="prewrite_finetune",
+            num_ppo_epochs=1,
+            gamma=1.0,
+            lam=0.95,
+            whiten_rewards=True,
+            cliprange_value=0.2,
+            vf_coef=0.1,
         )
-        try:
-            self.writer=SummaryWriter(log_dir) if log_dir else None
-        except Exception:
-            self.writer=None
-        self.global_step=0
-
-    # _ensure_ppo removed: initialization now always happens in __init__ with dataset
-
-    def _generate_rewrite(self, instruction: str, max_new_tokens: int = 64) -> Tuple[str,List[int],List[int]]:
-        query=format_rewriter_query(self.meta_prompt, instruction)
-        import torch
-        q=self.tokenizer(query, return_tensors="pt").to(self.ppo.accelerator.device)
-        gen=self.ppo.generate(q["input_ids"], max_new_tokens=max_new_tokens, do_sample=True, temperature=1.0, pad_token_id=self.tokenizer.pad_token_id)
-        resp_ids=gen[:, q["input_ids"].shape[1]:]
-        rewritten=self.tokenizer.batch_decode(resp_ids, skip_special_tokens=True)[0].strip()
-        return rewritten, q["input_ids"][0].tolist(), resp_ids[0].tolist()
-
-    def step_on_example(self, ex: RewriteExample) -> float:
-        rewritten, query_ids, response_ids = self._generate_rewrite(ex.instruction)
-        reward=self.evaluator.score(ex, rewritten)
-        import torch
-        q=torch.tensor(query_ids, device=self.ppo.accelerator.device)
-        r=torch.tensor(response_ids, device=self.ppo.accelerator.device)
-        self.ppo.step([q],[r],[float(reward)])
-        self.global_step+=1
-        if self.writer:
-            try: self.writer.add_scalar("train/reward", float(reward), self.global_step)
-            except Exception: pass
-        return float(reward)
-
-    def train(self, max_steps: int = 200, log_every: int = 10) -> None:
-        step=0
-        while step < max_steps:
-            for ex in self.dataset.iter():
-                if step>=max_steps: break
-                rew=self.step_on_example(ex); step+=1
-                if step % log_every == 0:
-                    try: self.ppo.accelerator.print(f"step {step}/{max_steps} reward={rew:.3f}")
-                    except Exception: print(f"step {step}/{max_steps} reward={rew:.3f}")
-
-    def save(self, output_dir: str) -> None:
-        self.ppo.save_pretrained(output_dir); self.tokenizer.save_pretrained(output_dir)
-        msg=f"Saved PPO policy to {output_dir}"
-        try: self.ppo.accelerator.print(msg)
-        except Exception: print(msg)
-        if self.writer:
-            try: self.writer.flush(); self.writer.close()
-            except Exception: pass
+        optim = torch.optim.AdamW(
+            model.parameters(),
+            lr=1e-5
+        )
+        sched = torch.optim.lr_scheduler.LinearLR(
+            optim, start_factor=1.0,
+            end_factor=0.0,
+            total_iters=1000
+        )
+        self.ppo_trainer = PPOTrainer(
+            args=ppo_config,
+            model=model,
+            ref_model=ref_model,
+            train_dataset=dataset.train,
+            eval_dataset=dataset.val,
+            optimizers=(optim, sched)
+        )
+    def train(self):
+        self.ppo_trainer.train()
+    
