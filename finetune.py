@@ -51,7 +51,7 @@ def load_from_hf(model_id: str) -> Tuple[Any, Any, Any]:
     if not os.path.exists(local_dir):
         print(f"Downloading model {model_id} from Hugging Face hub...")
         owner, model_name = model_id.split("/")
-        local_dir = download_model(model_id, f"models/{owner}/{model_name}", owner)
+        local_dir = download_model(model_id, f"models/{owner}/{model_name}")
     print(f"Loading model from local directory: {local_dir}")
     tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
     if tokenizer.pad_token is None:
