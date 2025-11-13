@@ -14,7 +14,6 @@ from typing import Optional, Any, List, Tuple
 from transformers import AutoTokenizer
 from torch.utils.tensorboard import SummaryWriter
 from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead
-from copy import deepcopy
 
 from load_datasets import (
     PRewriteDataset,
@@ -26,43 +25,6 @@ from load_datasets import (
 from inference import OllamaClient
 import re
 
-
-# ---------------- HF loading helper -----------------
-def download_model(model_id: str, local_dir: str) -> str:
-    """Download model from Hugging Face hub to local directory.
-
-    Returns the local directory path where the model is saved.
-    """
-    from huggingface_hub import snapshot_download
-    os.makedirs(local_dir, exist_ok=True)
-    snapshot_download(repo_id=model_id, local_dir=local_dir)
-    return local_dir
-
-# This loads model_id from Hugging face and saves it locally.
-def load_from_hf(model_id: str) -> Tuple[Any, Any, Any]:
-    """Load model & tokenizer from Hugging Face hub or local path; optionally persist locally.
-
-    Returns (tokenizer, model, ref_model) where model is an AutoModelForCausalLMWithValueHead instance.
-    Ref_model is a frozen copy of the base model without value head.
-    This is useful for baseline SFT loading prior to PPO wrapping.
-    """
-    #check if the model is downloaded locally already, recall models are saved as models/{owner}/{model_name}
-    local_dir = "models/" + model_id
-    if not os.path.exists(local_dir):
-        print(f"Downloading model {model_id} from Hugging Face hub...")
-        owner, model_name = model_id.split("/")
-        local_dir = download_model(model_id, f"models/{owner}/{model_name}")
-    print(f"Loading model from local directory: {local_dir}")
-    tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    #this needs to be a model with value head, otherwise you need a separate value model for PPOTrainer
-    model = AutoModelForCausalLMWithValueHead.from_pretrained(local_dir)
-    ref_model = deepcopy(model)
-    #freeze the reference model
-    for param in ref_model.parameters():
-        param.requires_grad = False
-    return tokenizer, model.to("cuda"), ref_model.to("cuda")
 
 # ---------------- Reward helpers -----------------
 # Calculates the reward for each prediction based on the example and the chosen reward mode.
