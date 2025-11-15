@@ -6,16 +6,14 @@ Paper: PRewrite (arXiv:2401.08189)
 This file provides a fresh, minimal wrapper that builds PPOConfig internally from kwargs.
 """
 from __future__ import annotations
-
-import argparse
 import os
-from typing import Optional, Any, List, Tuple
-
-from transformers import AutoTokenizer
+import json
+from transformers import AutoTokenizer, AutoModelForCausalLMWithValueHead
+from typing import Optional, List, Tuple, Any
+from abc import ABC, abstractmethod
 from torch import nn
-from torch.utils.tensorboard import SummaryWriter
 import torch
-from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead
+from trl import PPOConfig, PPOTrainer
 from copy import deepcopy
 
 from load_datasets import (
@@ -23,15 +21,15 @@ from load_datasets import (
     RewriteExample
 )
 
-from inference import OllamaClient, HFClient
+from inference import OllamaClient, HFClient, download_model
 import re
 
 # ---------------- Reward helpers -----------------
 # Calculates the reward for each prediction based on the example and the chosen reward mode.
 # Supports exact match, token-level F1, BLEU score, and math answer matching.
 class RewardComputer:
-    def __init__(self, mode: str = "auto") -> None:
-        self.mode = mode.lower() if mode else "auto"
+    def __init__(self, mode: str = "exact") -> None:
+        self.mode = mode.lower() if mode else "exact"
 
     @staticmethod
     def _norm(s: str) -> str:
@@ -115,8 +113,8 @@ class RewardComputer:
         return float(bp * geo)
 
     #this is the main reward function to calculate the value of a particular prediction
-    def compute_reward(self, example: RewriteExample, pred: str, mode: str = "auto") -> float:
-        m = (mode or "auto").lower()
+    def compute_reward(self, example: RewriteExample, pred: str) -> float:
+        m = self.mode.lower() if self.mode else "exact"
         gold = example.output
         if m=="f1": return self.token_f1(pred, gold)
         if m=="bleu": return self.bleu_score(pred, gold)
@@ -133,6 +131,7 @@ class BaseTaskEvaluator:
     def __init__(self, reward_mode: str = "auto") -> None: 
         self.reward_mode = reward_mode
         self.reward_computer = RewardComputer(reward_mode)
+    @abstractmethod
     def generate(self, prompt: str, max_tokens: int = 256) -> str: raise NotImplementedError
     def score(self, example: RewriteExample, rewritten_instruction: str) -> float:
         task_prompt = example.build_task_prompt(rewritten_instruction)
@@ -160,11 +159,11 @@ class HFTaskEvaluator(BaseTaskEvaluator):
 # ---------------- Reward Model -----------------
 # Reward model that uses the evaluator to compute rewards for PPO training
 class RewardModel(nn.Module):
-    def __init__(self, evaluator: BaseTaskEvaluator, reward_mode: str = "auto", data: List[RewriteExample] = [], device: str = "cuda"):
+    def __init__(self, evaluator: BaseTaskEvaluator, reward_mode: str = "auto", data: Optional[List[RewriteExample]] = None, device: str | torch.device = "cuda"):
         super().__init__()
         self.evaluator = evaluator
         self.reward_mode = reward_mode
-        self.data = data
+        self.data = data if data is not None else None
         self.device = device
 
     def forward(self, preds: List[str]) -> torch.Tensor:
@@ -177,8 +176,14 @@ class RewardModel(nn.Module):
 # ---------------- PPO Wrapper -----------------
 #I think this is buggy, havent gotten around to fix it yet.
 class PRewriteTrainer:
-    def __init__(self, tokenizer, model, ref_model, dataset, task: str = "auto"):
-        self.reward_model = RewardModel(RewardComputer(mode=task), data=dataset)
+    def __init__(self, model_id:  str, dataset, evaluator_model: str = "Qwen/Qwen2.5-0.5B-Instruct", task: str = "exact", ollama: bool = True):
+        if ollama:
+            self.evaluator = OllamaTaskEvaluator(evaluator_model, OllamaClient(), reward_mode=task)
+        else:
+            self.evaluator = HFTaskEvaluator(evaluator_model, HFClient(), reward_mode=task)
+        tokenizer, model, ref_model = self.load_from_hf(model_id)
+        device = model.device
+        self.reward_model = RewardModel(self.evaluator, data=dataset, device=device).to(device)
         ppo_config = PPOConfig(
             exp_name="prewrite_finetune",
             num_ppo_epochs=1,
@@ -207,4 +212,32 @@ class PRewriteTrainer:
         )
     def train(self):
         self.ppo_trainer.train()
+
+    @staticmethod
+    def load_from_hf(model_id: str) -> Tuple[Any, Any, Any]:
+        """Load model & tokenizer from Hugging Face hub or local path; optionally persist locally.
+
+        Returns (tokenizer, model, ref_model) where model is an AutoModelForCausalLMWithValueHead instance.
+        Ref_model is a frozen copy of the base model without value head.
+        This is useful for baseline SFT loading prior to PPO wrapping.
+        """
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        #check if the model is downloaded locally already, recall models are saved as models/{owner}/{model_name}
+        local_dir = "models/" + model_id
+        if not os.path.exists(local_dir):
+            print(f"Downloading model {model_id} from Hugging Face hub...")
+            owner, model_name = model_id.split("/")
+            local_dir = download_model(model_id, f"models/{owner}/{model_name}")
+        print(f"Loading model from local directory: {local_dir}")
+        tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+        #this needs to be a model with value head, otherwise you need a separate value model for PPOTrainer
+        model = AutoModelForCausalLMWithValueHead.from_pretrained(local_dir)
+        ref_model = deepcopy(model)
+        #freeze the reference model
+        ref_model.eval()
+        for param in ref_model.parameters():
+            param.requires_grad = False
+        return tokenizer, model.to(device), ref_model.to(device)
     
