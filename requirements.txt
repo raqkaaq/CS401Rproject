@@ -1,4 +1,4 @@
-trl==0.25.0
+trl==0.25.1
 transformers>=4.41.0
 accelerate>=0.33.0
 pandas>=2.2.0
