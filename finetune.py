@@ -8,18 +8,13 @@ This file provides a fresh, minimal wrapper that builds PPOConfig internally fro
 from __future__ import annotations
 import os
 import json
-from transformers import AutoTokenizer, AutoModelForCausalLMWithValueHead
+from transformers import AutoTokenizer
 from typing import Optional, List, Tuple, Any
 from abc import ABC, abstractmethod
 from torch import nn
 import torch
-from trl import PPOConfig, PPOTrainer
+from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead
 from copy import deepcopy
-
-from load_datasets import (
-    PRewriteDataset,
-    RewriteExample
-)
 
 from inference import OllamaClient, HFClient, download_model
 import re
@@ -113,15 +108,21 @@ class RewardComputer:
         return float(bp * geo)
 
     #this is the main reward function to calculate the value of a particular prediction
-    def compute_reward(self, example: RewriteExample, pred: str) -> float:
+    def compute_reward(self, example: dict | RewriteExample, pred: str) -> float:
         m = self.mode.lower() if self.mode else "exact"
-        gold = example.output
+        # Handle both dict (Hugging Face dataset) and RewriteExample
+        if isinstance(example, dict):
+            gold = example.get("answer", example.get("output", ""))
+            task = example.get("task", None)
+        else:
+            gold = example.output
+            task = getattr(example, "task", None)
         if m=="f1": return self.token_f1(pred, gold)
         if m=="bleu": return self.bleu_score(pred, gold)
         if m=="math": return self.math_reward(pred, gold)
         if m=="exact": return self.exact_match(pred, gold)
-        if getattr(example,"task",None)=="math": return self.math_reward(pred, gold)
-        if getattr(example,"task",None)=="qa": return self.token_f1(pred, gold)
+        if task=="math": return self.math_reward(pred, gold)
+        if task=="qa": return self.token_f1(pred, gold)
         return self.exact_match(pred, gold)
 
 
@@ -133,10 +134,20 @@ class BaseTaskEvaluator:
         self.reward_computer = RewardComputer(reward_mode)
     @abstractmethod
     def generate(self, prompt: str, max_tokens: int = 256) -> str: raise NotImplementedError
-    def score(self, example: RewriteExample, rewritten_instruction: str) -> float:
-        task_prompt = example.build_task_prompt(rewritten_instruction)
+    def score(self, example: dict | RewriteExample, rewritten_instruction: str) -> float:
+        # Handle both dict (Hugging Face dataset) and RewriteExample
+        if isinstance(example, dict):
+            # For dict: assume "question" or "instruction" field, and optional "input"
+            question = example.get("question") or example.get("instruction", "")
+            inp = example.get("input", "")
+            if inp and len(str(inp).strip()) > 0:
+                task_prompt = f"{rewritten_instruction}\nInput: {inp}"
+            else:
+                task_prompt = rewritten_instruction
+        else:
+            task_prompt = example.build_task_prompt(rewritten_instruction)
         out = self.generate(task_prompt, max_tokens=256)
-        return self.reward_computer.compute_reward(example, out, self.reward_mode)
+        return self.reward_computer.compute_reward(example, out)
 
 class OllamaTaskEvaluator(BaseTaskEvaluator):
     def __init__(self, model: str, client: OllamaClient, reward_mode: str = "auto"):
@@ -159,7 +170,7 @@ class HFTaskEvaluator(BaseTaskEvaluator):
 # ---------------- Reward Model -----------------
 # Reward model that uses the evaluator to compute rewards for PPO training
 class RewardModel(nn.Module):
-    def __init__(self, evaluator: BaseTaskEvaluator, reward_mode: str = "auto", data: Optional[List[RewriteExample]] = None, device: str | torch.device = "cuda"):
+    def __init__(self, evaluator: BaseTaskEvaluator, reward_mode: str = "auto", data: Optional[List[RewriteExample | dict]] = None, device: str | torch.device = "cuda"):
         super().__init__()
         self.evaluator = evaluator
         self.reward_mode = reward_mode
@@ -169,12 +180,12 @@ class RewardModel(nn.Module):
     def forward(self, preds: List[str]) -> torch.Tensor:
         rewards = []
         for pred, example in zip(preds, self.data):
-            reward = self.evaluator.score(example, pred, self.reward_mode)
+            reward = self.evaluator.score(example, pred)
             rewards.append(reward)
         return torch.tensor(rewards, dtype=torch.float32).to(self.device)
 
 # ---------------- PPO Wrapper -----------------
-#I think this is buggy, havent gotten around to fix it yet.
+# I think this is buggy, havent gotten around to fix it yet.
 class PRewriteTrainer:
     def __init__(self, model_id:  str, dataset, evaluator_model: str = "Qwen/Qwen2.5-0.5B-Instruct", task: str = "exact", ollama: bool = True):
         if ollama:
