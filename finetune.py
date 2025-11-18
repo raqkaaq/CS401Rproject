@@ -170,19 +170,18 @@ class HFTaskEvaluator(BaseTaskEvaluator):
 # ---------------- Reward Model -----------------
 # Reward model that uses the evaluator to compute rewards for PPO training
 class RewardModel(nn.Module):
-    def __init__(self, evaluator: BaseTaskEvaluator, reward_mode: str = "auto", data: Optional[List[dict]] = None, device: str | torch.device = "cuda"):
+    def __init__(self, evaluator: BaseTaskEvaluator, reward_mode: str = "auto", data: Optional[List[dict]] = None):
         super().__init__()
         self.evaluator = evaluator
         self.reward_mode = reward_mode
         self.data = data if data is not None else None
-        self.device = device
 
     def forward(self, preds: List[str]) -> torch.Tensor:
         rewards = []
         for pred, example in zip(preds, self.data):
             reward = self.evaluator.score(example, pred)
             rewards.append(reward)
-        return torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        return torch.tensor(rewards, dtype=torch.float32).to("cpu")
 
 # ---------------- PPO Wrapper -----------------
 # I think this is buggy, havent gotten around to fix it yet.
@@ -214,7 +213,7 @@ class PRewriteTrainer:
             # Assume it's already a list
             train_data = dataset if isinstance(dataset, list) else []
         
-        self.reward_model = RewardModel(self.evaluator, data=train_data, device=device).to(device)
+        self.reward_model = RewardModel(self.evaluator, data=train_data)
         ppo_config = PPOConfig(
             exp_name="prewrite_finetune",
             num_ppo_epochs=1,
