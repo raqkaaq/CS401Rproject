@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from torch import nn
 import torch
 from transformers import GenerationConfig, AutoModelForCausalLM
-from trl import PPOConfig, PPOTrainer
+from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead, create_reference_model
 
 from inference import OllamaClient, HFClient, download_model
 from dataset_parsers import get_parser  # NEW
@@ -231,6 +231,7 @@ class PRewriteTrainer:
         )
 
     def train(self):
+        print("Starting PPO training...")
         self.ppo_trainer.train()
 
     @staticmethod
@@ -259,21 +260,8 @@ class PRewriteTrainer:
             base_config = GenerationConfig.from_pretrained(local_dir)
             
             # Load the policy model (with value head for PPO)
-            model = AutoModelForCausalLM.from_pretrained(local_dir)
-            if model is None:
-                raise RuntimeError(f"Failed to load model from {local_dir}: model is None")
-            model.generation_config = base_config
-            
-            # Load the reference model separately (avoid deepcopy by loading from checkpoint)
-            ref_model = AutoModelForCausalLM.from_pretrained(local_dir)
-            if ref_model is None:
-                raise RuntimeError(f"Failed to load reference model from {local_dir}: ref_model is None")
-            ref_model.generation_config = base_config
-            
-            # Freeze the reference model
-            ref_model.eval()
-            for param in ref_model.parameters():
-                param.requires_grad = False
+            model = AutoModelForCausalLMWithValueHead.from_pretrained(local_dir)
+            ref_model = create_reference_model(model)
             
             # Move both models to target device
             model = model.to(device)

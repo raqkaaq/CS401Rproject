@@ -1,9 +1,9 @@
-trl==0.25.1
-transformers>=4.41.0
-accelerate>=0.33.0
-pandas>=2.2.0
-torch>=2.3.0
-sentencepiece>=0.2.0
-requests>=2.31.0
-tensorboard>=2.15.0
+trl
+transformers
+accelerate
+pandas
+torch
+sentencepiece
+requests
+tensorboard
 bitsandbytes
