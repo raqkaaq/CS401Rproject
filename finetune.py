@@ -272,8 +272,11 @@ class PRewriteTrainer:
         local_dir = "models/" + model_id
         if not os.path.exists(local_dir):
             print(f"Downloading model {model_id} from Hugging Face hub...")
-            owner, model_name = model_id.split("/")
-            local_dir = download_model(model_id, f"models/{owner}/{model_name}")
+            if "/" in model_id:
+                owner, model_name = model_id.split("/")
+                local_dir = download_model(model_id, f"models/{owner}/{model_name}")
+            else:
+                local_dir = download_model(model_id, f"models/{model_id}")
         print(f"Loading model from local directory: {local_dir}")
         try:
             tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
