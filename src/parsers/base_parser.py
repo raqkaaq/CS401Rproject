@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 
 class BaseParser(ABC):
-    def __init__(self, dataset_name: str, meta_prompt: str):
+    def __init__(self, dataset_name: str, meta_prompt: str, num_samples: int = None):
         self.dataset_name = dataset_name
         self.meta_prompt = meta_prompt
         self.dataset = None
-    
+        self.num_samples = num_samples
+
     @abstractmethod
     def download_dataset(self):
         raise NotImplementedError

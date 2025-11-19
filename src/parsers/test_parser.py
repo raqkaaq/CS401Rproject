@@ -41,7 +41,7 @@ class TestParser(BaseParser):
         }
         print(f"Created synthetic test dataset with {self.num_samples} samples")
     
-    def parse(self, datapoint_size: Optional[int] = None) -> List[Dict[str, Any]]:
+    def parse(self) -> List[Dict[str, Any]]:
         """
         Parse the test dataset into a compatible format for the GRPOTrainer.
         
@@ -69,8 +69,7 @@ class TestParser(BaseParser):
             self.download_dataset()
         
         # Determine how many samples to use
-        num_to_parse = datapoint_size if datapoint_size is not None else len(self.dataset["train"])
-        num_to_parse = min(num_to_parse, len(self.dataset["train"]))
+        num_to_parse = self.num_samples if self.num_samples is not None else len(self.dataset["train"])
         
         parsed_data = []
         for i in range(num_to_parse):

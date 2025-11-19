@@ -32,7 +32,7 @@ class MathParser(BaseParser):
         self.dataset = load_dataset("trl-lib/DeepMath-103K", split="train")
 
     
-    def parse(self, datapoint_size: Optional[int] = None) -> List[Dict[str, Any]]:
+    def parse(self) -> List[Dict[str, Any]]:
         """
         Parse the test dataset into a compatible format for the GRPOTrainer.
         
@@ -50,9 +50,7 @@ class MathParser(BaseParser):
             ...
         ]
         
-        Args:
-            datapoint_size: The number of datapoints to parse. If None, parse all samples.
-        
+
         Returns:
             The parsed dataset in GRPOTrainer format.
         """
@@ -62,8 +60,7 @@ class MathParser(BaseParser):
         # Determine how many samples to use and also randomize the samples
         # Note: self.dataset is already a Dataset (not DatasetDict) because split="train" was used
         self.dataset = self.dataset.shuffle(seed=42)  # TODO: Make this a random seed
-        num_to_parse = datapoint_size if datapoint_size is not None else len(self.dataset)
-        num_to_parse = min(num_to_parse, len(self.dataset))
+        num_to_parse = self.num_samples if self.num_samples is not None else len(self.dataset)
         
         parsed_data = []
         for i in range(num_to_parse):
