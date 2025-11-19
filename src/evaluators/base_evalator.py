@@ -8,12 +8,12 @@ class BaseEvaluator(ABC):
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
-
-        # TODO: We will have to change this for inference.
+        
         if client is None:
             # Default to OllamaClient if no client is provided
             from ..inference import OllamaClient
             self.client = OllamaClient()
+            self.client.warmup_model(self.model)
         else:
             self.client = client
 
