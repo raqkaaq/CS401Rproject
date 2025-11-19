@@ -8,7 +8,7 @@ class BaseEvaluator(ABC):
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
-        
+
         if client is None:
             # Default to OllamaClient if no client is provided
             from ..inference import OllamaClient
@@ -77,7 +77,7 @@ class BaseEvaluator(ABC):
         Returns:
             List of reward scores (floats).
         """
-        completion_strings = [completion[0]["content"] for completion in completions]
+        completion_strings = [completion for completion in completions]
         rewards = []
         for completion_string in completion_strings:
             base_llm_output = self.pass_to_inference(completion_string, **kwargs)
