@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 from collections import Counter
 import math
 
@@ -61,20 +61,21 @@ class BaseEvaluator(ABC):
             # Fallback: try the base LLMClient interface
             return self.client.generate(model=self.model, prompt=prompt, temperature=self.temperature, max_tokens=self.max_tokens)
     
-    def reward_function(self, completions: List[], **kwargs) -> List[float]:
+    def reward_function(self, completions: List[List[Dict[str, str]]], **kwargs) -> List[float]:
         """
         Reward function to be used by the GRPOTrainer.
 
         The kwargs are generally the other information in the dataset excluding the "prompt" key.
 
         Args:
-            completions: List of completions, where each completion is a string.
+            completions: List of completions, where each completion is a list containing a dict with 'role' and 'content' keys.
+                        Format: [[{'role': 'assistant', 'content': '...'}], ...]
             **kwargs: Additional keyword arguments passed to the reward function.
 
         Returns:
             List of reward scores (floats).
         """
-        completion_strings = [completion["content"] for completion in completions]
+        completion_strings = [completion[0]["content"] for completion in completions]
         rewards = []
         for completion_string in completion_strings:
             base_llm_output = self.pass_to_inference(completion_string, **kwargs)
