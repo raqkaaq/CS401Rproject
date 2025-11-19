@@ -7,7 +7,9 @@ from trl import GRPOConfig
 
 from src.finetune import Finetune
 from src.parsers.test_parser import TestParser
+from src.parsers.math_parser import MathParser
 from src.evaluators.test_evaluator import TestEvaluator
+from src.evaluators.math_evaluator import MathEvaluator
 
 
 def main():
@@ -27,7 +29,7 @@ def main():
         "--parser-type",
         type=str,
         default="test",
-        choices=["test"],
+        choices=["test", "math"],
         help="Type of parser to use"
     )
     parser.add_argument(
@@ -54,7 +56,7 @@ def main():
         "--evaluator-type",
         type=str,
         default="test",
-        choices=["test"],
+        choices=["test", "math"],
         help="Type of evaluator to use"
     )
     parser.add_argument(
@@ -107,6 +109,12 @@ def main():
             meta_prompt=args.meta_prompt,
             num_samples=args.num_samples
         )
+    elif args.parser_type == "math":
+        parser_instance = MathParser(
+            dataset_name=args.dataset_name,
+            meta_prompt=args.meta_prompt,
+            num_samples=args.num_samples
+        )
     else:
         raise ValueError(f"Unknown parser type: {args.parser_type}")
     
@@ -119,6 +127,13 @@ def main():
             temperature=0.0,
             max_tokens=256,
             test_mode=args.test_mode
+        )
+    elif args.evaluator_type == "math": 
+        evaluator_instance = MathEvaluator(
+            model=args.evaluator_model,
+            client=None,  # Will default to OllamaClient
+            temperature=0.0,
+            max_tokens=256
         )
     else:
         raise ValueError(f"Unknown evaluator type: {args.evaluator_type}")
