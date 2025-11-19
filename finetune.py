@@ -14,9 +14,10 @@ from abc import ABC, abstractmethod
 from torch import nn
 import torch
 from transformers import GenerationConfig, AutoModelForCausalLM
-from trl import PPOConfig, PPOTrainer
+from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead, create_reference_model
 
 from inference import OllamaClient, HFClient, download_model
+from dataset_parsers import get_parser  # NEW
 import re
 
 # ---------------- Reward helpers -----------------
@@ -135,15 +136,13 @@ class BaseTaskEvaluator:
     @abstractmethod
     def generate(self, prompt: str, max_tokens: int = 256) -> str: raise NotImplementedError
     def score(self, example: dict, rewritten_instruction: str) -> float:
-        # Handle both dict (Hugging Face dataset) and dict
         if isinstance(example, dict):
-            # For dict: assume "question" or "instruction" field, and optional "input"
             question = example.get("question") or example.get("instruction", "")
             inp = example.get("input", "")
             if inp and len(str(inp).strip()) > 0:
-                task_prompt = f"{rewritten_instruction}\nInput: {inp}"
+                task_prompt = f"{rewritten_instruction}\n\nQuestion:\n{question}\n\nInput:\n{inp}"
             else:
-                task_prompt = rewritten_instruction
+                task_prompt = f"{rewritten_instruction}\n\nQuestion:\n{question}"
         else:
             task_prompt = example.build_task_prompt(rewritten_instruction)
         out = self.generate(task_prompt, max_tokens=256)
@@ -170,51 +169,43 @@ class HFTaskEvaluator(BaseTaskEvaluator):
 # ---------------- Reward Model -----------------
 # Reward model that uses the evaluator to compute rewards for PPO training
 class RewardModel(nn.Module):
-    def __init__(self, evaluator: BaseTaskEvaluator, reward_mode: str = "auto", data: Optional[List[dict]] = None, device: str | torch.device = "cuda"):
+    def __init__(self, evaluator: BaseTaskEvaluator, reward_mode: str = "auto", data: Optional[List[dict]] = None):
         super().__init__()
         self.evaluator = evaluator
         self.reward_mode = reward_mode
         self.data = data if data is not None else None
-        self.device = device
 
     def forward(self, preds: List[str]) -> torch.Tensor:
         rewards = []
         for pred, example in zip(preds, self.data):
             reward = self.evaluator.score(example, pred)
             rewards.append(reward)
-        return torch.tensor(rewards, dtype=torch.float32).to(self.device)
+        return torch.tensor(rewards, dtype=torch.float32).to("cpu")
 
 # ---------------- PPO Wrapper -----------------
 # I think this is buggy, havent gotten around to fix it yet.
 class PRewriteTrainer:
-    def __init__(self, model_id:  str, dataset, evaluator_model: str = "Qwen/Qwen2.5-0.5B-Instruct", task: str = "exact", ollama: bool = True):
+    def __init__(self, model_id:  str, dataset: str, evaluator_model: str = "Qwen/Qwen2.5-0.5B-Instruct",
+                 task: str = "exact", ollama: bool = True):
         if ollama:
             print("Using Ollama evaluator")
             self.evaluator = OllamaTaskEvaluator(evaluator_model, OllamaClient(), reward_mode=task)
         else:
             print("Using HF evaluator")
             self.evaluator = HFTaskEvaluator(evaluator_model, HFClient(), reward_mode=task)
+
         tokenizer, model, ref_model = self.load_from_hf(model_id)
-        if model is None:
-            raise RuntimeError(f"Failed to load model: model is None after load_from_hf")
-        if ref_model is None:
-            raise RuntimeError(f"Failed to load reference model: ref_model is None after load_from_hf")
+        if model is None or ref_model is None:
+            raise RuntimeError("Failed to load model or reference model")
         self.tokenizer = tokenizer
-        device = next(model.parameters()).device
-        
-        # Convert dataset to list of dicts for RewardModel
-        # Handle Hugging Face DatasetDict (has "train" split)
-        if hasattr(dataset, "train") and hasattr(dataset.train, "to_list"):
-            # Hugging Face Dataset or DatasetDict
-            train_data = dataset["train"].to_list() if hasattr(dataset, "__getitem__") else dataset.train.to_list()
-        elif hasattr(dataset, "train") and hasattr(dataset.train, "__iter__"):
-            # PRewriteDataset or similar with iterable train split
-            train_data = list(dataset.train.iterrows()) if hasattr(dataset.train, "iterrows") else [ex for ex in dataset.train]
-        else:
-            # Assume it's already a list
-            train_data = dataset if isinstance(dataset, list) else []
-        
-        self.reward_model = RewardModel(self.evaluator, data=train_data, device=device).to(device)
+
+        # Parse & tokenize dataset via parser factory
+        parser = get_parser(dataset, self.tokenizer)
+        tokenized_train_ds, tokenized_eval_ds, raw_train_examples = parser.prepare()
+
+        # Reward model uses raw examples list
+        self.reward_model = RewardModel(self.evaluator, data=raw_train_examples)
+
         ppo_config = PPOConfig(
             exp_name="prewrite_finetune",
             num_ppo_epochs=1,
@@ -224,27 +215,9 @@ class PRewriteTrainer:
             cliprange_value=0.2,
             vf_coef=0.1,
         )
-        optim = torch.optim.AdamW(
-            model.parameters(),
-            lr=1e-5
-        )
-        sched = torch.optim.lr_scheduler.LinearLR(
-            optim, start_factor=1.0,
-            end_factor=0.0,
-            total_iters=1000
-        )
-        
-        # Hugging Face DatasetDict uses ["train"] and ["test"] or ["validation"]
-        if hasattr(dataset, "__getitem__") and "train" in dataset:
-            train_dataset = dataset["train"]
-            eval_dataset = dataset.get("test", dataset.get("validation", None))
-        elif hasattr(dataset, "train"):
-            train_dataset = dataset.train
-            eval_dataset = getattr(dataset, "val", getattr(dataset, "test", None))
-        else:
-            train_dataset = dataset
-            eval_dataset = None
-        
+        optim = torch.optim.AdamW(model.parameters(), lr=1e-5)
+        sched = torch.optim.lr_scheduler.LinearLR(optim, start_factor=1.0, end_factor=0.0, total_iters=1000)
+
         self.ppo_trainer = PPOTrainer(
             args=ppo_config,
             ref_model=None,
@@ -252,12 +225,13 @@ class PRewriteTrainer:
             processing_class=self.tokenizer,
             model=model,
             reward_model=self.reward_model,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
+            train_dataset=tokenized_train_ds,
+            eval_dataset=tokenized_eval_ds,
             optimizers=(optim, sched)
         )
 
     def train(self):
+        print("Starting PPO training...")
         self.ppo_trainer.train()
 
     @staticmethod
@@ -273,8 +247,11 @@ class PRewriteTrainer:
         local_dir = "models/" + model_id
         if not os.path.exists(local_dir):
             print(f"Downloading model {model_id} from Hugging Face hub...")
-            owner, model_name = model_id.split("/")
-            local_dir = download_model(model_id, f"models/{owner}/{model_name}")
+            if "/" in model_id:
+                owner, model_name = model_id.split("/")
+                local_dir = download_model(model_id, f"models/{owner}/{model_name}")
+            else:
+                local_dir = download_model(model_id, f"models/{model_id}")
         print(f"Loading model from local directory: {local_dir}")
         try:
             tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
@@ -283,21 +260,8 @@ class PRewriteTrainer:
             base_config = GenerationConfig.from_pretrained(local_dir)
             
             # Load the policy model (with value head for PPO)
-            model = AutoModelForCausalLM.from_pretrained(local_dir)
-            if model is None:
-                raise RuntimeError(f"Failed to load model from {local_dir}: model is None")
-            model.generation_config = base_config
-            
-            # Load the reference model separately (avoid deepcopy by loading from checkpoint)
-            ref_model = AutoModelForCausalLM.from_pretrained(local_dir)
-            if ref_model is None:
-                raise RuntimeError(f"Failed to load reference model from {local_dir}: ref_model is None")
-            ref_model.generation_config = base_config
-            
-            # Freeze the reference model
-            ref_model.eval()
-            for param in ref_model.parameters():
-                param.requires_grad = False
+            model = AutoModelForCausalLMWithValueHead.from_pretrained(local_dir)
+            ref_model = create_reference_model(model)
             
             # Move both models to target device
             model = model.to(device)
@@ -305,4 +269,3 @@ class PRewriteTrainer:
             return tokenizer, model, ref_model
         except Exception as e:
             raise RuntimeError(f"Error loading model {model_id} from {local_dir}: {e}") from e
-    
