@@ -12,7 +12,7 @@ class BaseEvaluator(ABC):
         # TODO: We will have to change this for inference.
         if client is None:
             # Default to OllamaClient if no client is provided
-            from inference import OllamaClient
+            from ..inference import OllamaClient
             self.client = OllamaClient()
         else:
             self.client = client
