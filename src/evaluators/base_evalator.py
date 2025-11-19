@@ -17,6 +17,16 @@ class BaseEvaluator(ABC):
 
     @abstractmethod
     def evaluate(self, base_llm_output: str, **kwargs) -> float:
+        """
+        Evaluate the base LLM output.
+
+        Args:
+            base_llm_output: The output from the base LLM.
+            **kwargs: Additional keyword arguments passed to the evaluate function.
+
+        Returns:
+            The reward score (float).
+        """
         raise NotImplementedError
     
     def pass_to_inference(self, prompt: str, **kwargs) -> str:
@@ -51,7 +61,7 @@ class BaseEvaluator(ABC):
             # Fallback: try the base LLMClient interface
             return self.client.generate(model=self.model, prompt=prompt, temperature=self.temperature, max_tokens=self.max_tokens)
     
-    def reward_function(self, completions: List[str], **kwargs) -> List[float]:
+    def reward_function(self, completions: List[], **kwargs) -> List[float]:
         """
         Reward function to be used by the GRPOTrainer.
 
@@ -64,10 +74,10 @@ class BaseEvaluator(ABC):
         Returns:
             List of reward scores (floats).
         """
-        
+        completion_strings = [completion["content"] for completion in completions]
         rewards = []
-        for completion in completions:
-            base_llm_output = self.pass_to_inference(completion, **kwargs)
+        for completion_string in completion_strings:
+            base_llm_output = self.pass_to_inference(completion_string, **kwargs)
             reward = self.evaluate(base_llm_output, **kwargs)
             rewards.append(reward)
         return rewards
