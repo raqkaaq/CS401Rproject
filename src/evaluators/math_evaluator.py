@@ -20,7 +20,7 @@ class MathEvaluator(BaseEvaluator):
         """
         super().__init__(model, client, temperature, max_tokens)
 
-        def reward_function(self, completions: List[List[Dict[str, str]]], **kwargs) -> List[float]:
+    def reward_function(self, completions: List[List[Dict[str, str]]], **kwargs) -> List[float]:
         """
         Reward function to be used by the GRPOTrainer.
 
