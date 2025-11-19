@@ -15,6 +15,19 @@ class BaseEvaluator(ABC):
         raise NotImplementedError
     
     def reward_function(self, completions: List[str], **kwargs) -> List[float]:
+        """
+        Reward function to be used by the GRPOTrainer.
+
+        The kwargs are generally the other information in the dataset excluding the "prompt" key.
+
+        Args:
+            completions: List of completions, where each completion is a string.
+            **kwargs: Additional keyword arguments passed to the reward function.
+
+        Returns:
+            List of reward scores (floats).
+        """
+        
         rewards = []
         for completion in completions:
             base_llm_output = self.pass_to_inference(completion, **kwargs)
