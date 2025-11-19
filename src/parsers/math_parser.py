@@ -66,32 +66,18 @@ class MathParser(BaseParser):
         for i in range(num_to_parse):
             sample = self.dataset[i]
             
-            # Handle the prompt - it may already be in the correct format (list of message dicts)
-            # or it might be a string. Check the structure.
-            if isinstance(sample["prompt"], list):
-                # If prompt is already a list of message dicts, use it directly
-                prompt_messages = sample["prompt"]
-                # If it's a list of lists (nested), take the first inner list
-                if prompt_messages and isinstance(prompt_messages[0], list):
-                    prompt_messages = prompt_messages[0]
-            else:
-                # If prompt is a string, convert it to the expected format
-                prompt_content = str(sample["prompt"])
-                if self.meta_prompt:
-                    prompt_content = f"{self.meta_prompt}\n\n{prompt_content}"
-                prompt_messages = [
-                    {
-                        "content": prompt_content,
-                        "role": "user"
-                    }
-                ]
-            
-            # Apply meta_prompt if provided and prompt is in message format
-            if self.meta_prompt and isinstance(sample["prompt"], list):
-                # Prepend meta_prompt to the first message's content
-                if prompt_messages and len(prompt_messages) > 0:
-                    original_content = prompt_messages[0].get("content", "")
-                    prompt_messages[0]["content"] = f"{self.meta_prompt}\n\n{original_content}"
+            prompt_content = str(sample["prompt"])
+
+            prompt_messages = [
+                {
+                    "content": self.meta_prompt,
+                    "role": "system"
+                },
+                {
+                    "content": prompt_content,
+                    "role": "user"
+                }
+            ]
             
             parsed_sample = {
                 "prompt": prompt_messages

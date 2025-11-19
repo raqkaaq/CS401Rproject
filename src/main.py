@@ -133,7 +133,7 @@ def main():
             model=args.evaluator_model,
             client=None,  # Will default to OllamaClient
             temperature=0.0,
-            max_tokens=256
+            max_tokens=5012
         )
     else:
         raise ValueError(f"Unknown evaluator type: {args.evaluator_type}")

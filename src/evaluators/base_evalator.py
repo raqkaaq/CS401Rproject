@@ -81,6 +81,8 @@ class BaseEvaluator(ABC):
         rewards = []
         for completion_string in completion_strings:
             base_llm_output = self.pass_to_inference(completion_string, **kwargs)
+            print("completion_string: ", completion_string)
+            print("base_llm_output: ", base_llm_output)
             reward = self.evaluate(base_llm_output, **kwargs)
             rewards.append(reward)
         return rewards
