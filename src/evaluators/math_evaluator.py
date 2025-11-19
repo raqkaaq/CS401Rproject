@@ -1,4 +1,5 @@
 from typing import Optional, Dict, Any
+from trl.rewards import accuracy_reward
 from .base_evalator import BaseEvaluator
 
 
@@ -18,16 +19,20 @@ class MathEvaluator(BaseEvaluator):
             max_tokens: Maximum tokens for generation
         """
         super().__init__(model, client, temperature, max_tokens)
-    
-    def evaluate(self, base_llm_output: str, **kwargs) -> float:
+
+        def reward_function(self, completions: List[List[Dict[str, str]]], **kwargs) -> List[float]:
         """
-        Evaluate the base LLM output based on the math mode.
-        
+        Reward function to be used by the GRPOTrainer.
+
+        The kwargs are generally the other information in the dataset excluding the "prompt" key.
+
         Args:
-            base_llm_output: The output from the base LLM.
-            **kwargs: Additional keyword arguments. May include 'gold' for comparison.
-        
+            completions: List of completions, where each completion is a list containing a dict with 'role' and 'content' keys.
+                        Format: [[{'role': 'assistant', 'content': '...'}], ...]
+            **kwargs: Additional keyword arguments passed to the reward function.
+
         Returns:
-            A math reward score (float between 0 and 1).
+            List of reward scores (floats).
         """
-        return len(base_llm_output.strip())
+        solution = kwargs.get("solution", None)
+        return accuracy_reward(completions, solution)

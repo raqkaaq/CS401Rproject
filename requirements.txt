@@ -7,3 +7,5 @@ sentencepiece
 requests
 tensorboard
 bitsandbytes
+latex2sympy2_extended
+math_verify
