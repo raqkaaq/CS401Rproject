@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from trl.rewards import accuracy_reward
 from .base_evalator import BaseEvaluator
 
@@ -20,6 +20,12 @@ class MathEvaluator(BaseEvaluator):
         """
         super().__init__(model, client, temperature, max_tokens)
 
+    def evaluate(self, base_llm_output: str, **kwargs) -> float:
+        """
+            Unused as it this is a special case for the math evaluator.
+        """
+        pass
+
     def reward_function(self, completions: List[List[Dict[str, str]]], **kwargs) -> List[float]:
         """
         Reward function to be used by the GRPOTrainer.
@@ -35,4 +41,6 @@ class MathEvaluator(BaseEvaluator):
             List of reward scores (floats).
         """
         solution = kwargs.get("solution", None)
-        return accuracy_reward(completions, solution)
+        rewards = accuracy_reward(completions, solution)
+        print(rewards)
+        return rewards
