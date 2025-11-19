@@ -1,18 +1,55 @@
 from abc import ABC, abstractmethod
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from collections import Counter
 import math
 
 class BaseEvaluator(ABC):
-    def __init__(self, model: str):
+    def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 256):
         self.model = model
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+        if client is None:
+            # Default to OllamaClient if no client is provided
+            from inference import OllamaClient
+            self.client = OllamaClient()
+        else:
+            self.client = client
 
     @abstractmethod
     def evaluate(self, base_llm_output: str, **kwargs) -> float:
         raise NotImplementedError
     
     def pass_to_inference(self, prompt: str, **kwargs) -> str:
-        raise NotImplementedError
+        """
+        Pass a prompt to the inference client to get a response from the base LLM.
+
+        Args:
+            prompt: The prompt string to send to the model
+            **kwargs: Additional keyword arguments (e.g., temperature, max_tokens, max_new_tokens)
+
+        Returns:
+            The generated response string from the base LLM
+        """
+        # Extract common generation parameters from kwargs
+        # Check if client is OllamaClient or HFClient and call appropriate method
+        client_type = type(self.client).__name__
+        
+        if client_type == 'OllamaClient':
+            return self.client.generate(
+                model=self.model,
+                prompt=prompt,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens
+            )
+        elif client_type == 'HFClient':
+            return self.client.generate(
+                model_id=self.model,
+                prompt=prompt,
+                max_new_tokens=self.max_tokens
+            )
+        else:
+            # Fallback: try the base LLMClient interface
+            return self.client.generate(model=self.model, prompt=prompt, temperature=self.temperature, max_tokens=self.max_tokens)
     
     def reward_function(self, completions: List[str], **kwargs) -> List[float]:
         """
