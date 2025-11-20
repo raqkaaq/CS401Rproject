@@ -26,7 +26,7 @@ class MathEvaluator(BaseEvaluator):
         """
         pass
 
-    def reward_function(self, completions: List[List[Dict[str, str]]], **kwargs) -> List[float]:
+    def reward_function(self, rewritten_prompts: List[List[Dict[str, str]]], **kwargs) -> List[float]:
         """
         Reward function to be used by the GRPOTrainer.
 
@@ -41,6 +41,14 @@ class MathEvaluator(BaseEvaluator):
             List of reward scores (floats).
         """
         solution = kwargs.get("solution", None)
-        rewards = accuracy_reward(completions, solution)
-        print(rewards)
+
+
+        # Format completions as a list of dictionaries with the role and content
+        formatted_completions = []
+        rewritten_prompt_strings = [rewritten_prompt for rewritten_prompt in rewritten_prompts]
+        for rewritten_prompt_string in rewritten_prompt_strings:
+            base_llm_output = self.pass_to_inference(rewritten_prompt_string, **kwargs)
+            print("base_llm_output: ", base_llm_output)
+            formatted_completions.append({"role": "assistant", "content": base_llm_output})
+        rewards = accuracy_reward(formatted_completions, solution)
         return rewards
