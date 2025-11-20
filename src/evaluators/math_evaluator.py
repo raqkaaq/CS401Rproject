@@ -46,7 +46,8 @@ class MathEvaluator(BaseEvaluator):
 
         # Format completions for accuracy_reward: it expects [[{"content": "..."}], ...]
         formatted_completions = []
-        for rewritten_prompt_string in rewritten_prompt_strings:
+
+        for rewritten_prompt_string in rewritten_prompts:
             base_llm_output = self.pass_to_inference(rewritten_prompt_string, **kwargs)
             # accuracy_reward expects format: [[{"content": "..."}], ...]
             formatted_completions.append([{"content": base_llm_output}])
