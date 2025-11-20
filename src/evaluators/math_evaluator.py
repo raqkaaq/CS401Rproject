@@ -33,8 +33,9 @@ class MathEvaluator(BaseEvaluator):
         The kwargs are generally the other information in the dataset excluding the "prompt" key.
 
         Args:
-            completions: List of completions, where each completion is a list containing a dict with 'role' and 'content' keys.
-                        Format: [[{'role': 'assistant', 'content': '...'}], ...]
+            rewritten_prompts: List of rewritten prompts. Can be either:
+                              - List of strings (from finetune.py wrapper)
+                              - List of lists containing dicts with 'role' and 'content' keys.
             **kwargs: Additional keyword arguments passed to the reward function.
 
         Returns:
@@ -43,12 +44,13 @@ class MathEvaluator(BaseEvaluator):
         solution = kwargs.get("solution", None)
 
 
-        # Format completions as a list of dictionaries with the role and content
+        # Format completions for accuracy_reward: it expects [[{"content": "..."}], ...]
         formatted_completions = []
-        rewritten_prompt_strings = [rewritten_prompt for rewritten_prompt in rewritten_prompts]
         for rewritten_prompt_string in rewritten_prompt_strings:
             base_llm_output = self.pass_to_inference(rewritten_prompt_string, **kwargs)
-            print("base_llm_output: ", base_llm_output)
-            formatted_completions.append({"role": "assistant", "content": base_llm_output})
+            # accuracy_reward expects format: [[{"content": "..."}], ...]
+            formatted_completions.append([{"content": base_llm_output}])
+        
         rewards = accuracy_reward(formatted_completions, solution)
+        print("Rewards: ", rewards)
         return rewards
