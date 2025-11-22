@@ -18,6 +18,8 @@ export HF_HOME=$HOME/.cache/huggingface
 export TRANSFORMERS_CACHE=$HOME/.cache/huggingface
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 
+source ~/venv/bin/activate
+
 # Check GPU
 echo "GPU Information:"
 nvidia-smi

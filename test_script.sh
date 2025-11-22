@@ -29,6 +29,8 @@ else
     exit 1
 fi
 
+source ~/venv/bin/activate
+
 # Check 3: Check if required Python packages are available
 echo ""
 echo "3. Checking Python packages..."
