@@ -83,6 +83,9 @@ source ~/venv/bin/activate
 export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID
 export HF_HOME=$HOME/.cache/huggingface
 export TRANSFORMERS_CACHE=$HOME/.cache/huggingface
+export HF_DATASETS_CACHE=$HOME/.cache/huggingface/datasets
+# Force offline mode for HuggingFace (use cache only, no internet)
+export HF_HUB_OFFLINE=1
 
 # Memory and performance settings
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
