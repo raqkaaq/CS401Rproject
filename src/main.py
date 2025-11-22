@@ -3,6 +3,13 @@
 Main entry point for GRPO fine-tuning using parsers and evaluators.
 """
 import argparse
+import sys
+from pathlib import Path
+
+# Add project root to path so imports work
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from trl import GRPOConfig
 
 from src.finetune import Finetune

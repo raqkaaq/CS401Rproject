@@ -108,7 +108,9 @@ echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available()
 
 # Change to project directory (adjust path as needed)
 # If running from project root, this may not be necessary
-# cd /path/to/CS401Rproject
+# The script will automatically find the project root, but being in the right directory helps
+cd "$SLURM_SUBMIT_DIR" || cd ~/CS401Rproject || pwd
+echo "Working directory: $(pwd)"
 
 # Run training
 # Note: Using --client-type hf to force HuggingFace client (Ollama won't be available on compute nodes)
