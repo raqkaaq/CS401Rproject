@@ -26,10 +26,20 @@ class MathParser(BaseParser):
     
     def download_dataset(self):
         """
-        Create synthetic test data instead of downloading.
-        In a real implementation, this would download the dataset.
+        Download the dataset from HuggingFace.
+        The dataset will be cached in ~/.cache/huggingface/datasets/ for future use.
         """
-        self.dataset = load_dataset("trl-lib/DeepMath-103K", split="train")
+        try:
+            self.dataset = load_dataset("trl-lib/DeepMath-103K", split="train")
+            print(f"Downloaded dataset: {len(self.dataset)} samples")
+        except Exception as e:
+            if "Network" in str(e) or "unreachable" in str(e) or "Connection" in str(e):
+                raise RuntimeError(
+                    "Dataset not found in cache and cannot download (no internet on compute node). "
+                    "Please pre-download datasets on login node. The prepare_environment.sh script "
+                    "can do this, or run: python -c \"from datasets import load_dataset; load_dataset('trl-lib/DeepMath-103K', split='train')\""
+                ) from e
+            raise
 
     
     def parse(self) -> List[Dict[str, Any]]:
