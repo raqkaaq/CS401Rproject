@@ -124,12 +124,36 @@ After training completes:
 
 ## Resource Recommendations
 
-Based on model size:
-- **0.5B models**: 1 GPU, 16-32GB RAM, 8 CPUs
-- **1-3B models**: 1-2 GPUs, 32-64GB RAM, 8-16 CPUs
-- **7B+ models**: 2-4 GPUs, 64GB+ RAM, 16+ CPUs
+### BYU GPU Options
 
-Adjust `--batch-size` and `--num-epochs` based on your dataset size and time limits.
+| GPU Type | Memory | Cluster | Nodes | GPUs/Node | Best For |
+|----------|--------|---------|-------|-----------|----------|
+| **H200** | 141GB | marylou13h | 4 | 8 | **7B+14B models (RECOMMENDED)** |
+| **H100** | 96GB | marylouGH | 2 | 1 | 7B+14B models |
+| **A100** | 80GB | Preemption | 10 | 8 | 7B+14B models (preemptable) |
+| **L40S** | 48GB | marylou13l | 4 | 4 | 1-3B models |
+| **P100** | 16GB | marylou9g | 40 | 4 | < 1B models |
+
+### Model Size Recommendations
+
+| Training Model | Evaluator Model | Recommended GPU | CPU | RAM | Partition |
+|----------------|-----------------|-----------------|-----|-----|-----------|
+| < 1B | < 1B | P100 (16GB) | 8 | 32GB | marylou9g |
+| 1-3B | 1-3B | L40S (48GB) | 16 | 64GB | marylou13l |
+| 3-7B | 3-7B | A100 (80GB) | 16 | 128GB | Preemption |
+| 7B | 7B | H100 (96GB) | 16 | 128GB | marylouGH |
+| **7B** | **14B** | **H200 (141GB)** | **16** | **128GB** | **marylou13h** |
+| 14B+ | 14B+ | H200 (141GB) | 32 | 256GB | marylou13h |
+
+### Current Configuration (7B training + 14B evaluation)
+
+The default script uses:
+- **GPU**: H200 (141GB) - `--gpus=h200:1`
+- **Partition**: marylou13h
+- **CPUs**: 16
+- **Memory**: 128GB
+
+This provides plenty of headroom for both models. Adjust `--batch-size` based on available memory and training speed.
 
 ## Troubleshooting
 

@@ -2,13 +2,17 @@
 #SBATCH --job-name=grpo_training
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=32G
-#SBATCH --gpus=1
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=128G
+#SBATCH --gpus=h200:1
 #SBATCH --time=24:00:00
 #SBATCH --output=grpo_%j.out
 #SBATCH --error=grpo_%j.err
-#SBATCH --partition=gpu  # Adjust based on BYU cluster partition names
+#SBATCH --partition=marylou13h  # H200 GPUs (141GB each) - best for 7B+14B models
+# Alternative partitions:
+# --partition=marylouGH --gpus=h100:1  # H100 (96GB) - Grace Hopper nodes
+# --partition=marylou13l --gpus=l40s:1  # L40S (48GB) - might be tight for both models
+# For preemption nodes (A100 80GB): remove --partition and add --qos=preempt
 
 # Print job information
 echo "Job ID: $SLURM_JOB_ID"
@@ -39,9 +43,22 @@ export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID
 export HF_HOME=$HOME/.cache/huggingface
 export TRANSFORMERS_CACHE=$HOME/.cache/huggingface
 
+# Memory and performance settings
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+
+# Enable better error reporting
+set -e  # Exit on error
+set -u  # Exit on undefined variable
+
 # Print GPU information
 echo "GPU Information:"
 nvidia-smi
+echo ""
+echo "Requested Resources:"
+echo "  GPUs: $SLURM_GPUS"
+echo "  CPUs: $SLURM_CPUS_PER_TASK"
+echo "  Memory: $SLURM_MEM_PER_NODE"
+echo "  Partition: $SLURM_JOB_PARTITION"
 
 # Print Python and package versions
 echo "Python version: $(python --version)"
@@ -76,4 +93,9 @@ python src/main.py \
 # Print completion time
 echo "End Time: $(date)"
 echo "Job completed successfully!"
+
+# Final GPU status
+echo ""
+echo "Final GPU Status:"
+nvidia-smi
 
