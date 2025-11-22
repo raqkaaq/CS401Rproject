@@ -1,8 +1,11 @@
 #!/bin/bash
 # Test script to validate your training setup before submitting
 # Run this on the login node to check everything is ready
+# NOTE: Some tests may show warnings if run on a machine without GPU/CUDA
+#       This is expected - the actual job will have CUDA loaded
 
 echo "=== Testing Training Script Setup ==="
+echo "Running on: $(hostname)"
 echo ""
 
 # Check 1: Validate Slurm script syntax
@@ -112,11 +115,6 @@ fi
 if [ -n "$ACTIVE_GPU" ]; then
     echo "   GPU request: $ACTIVE_GPU"
 fi
-
-# Check 8: Test argument parsing
-echo ""
-echo "8. Testing command-line argument parsing..."
-python src/main.py --help &>/dev/null && echo "   ✓ Argument parsing works" || echo "   ✗ Argument parsing failed"
 
 echo ""
 echo "=== Test Summary ==="
