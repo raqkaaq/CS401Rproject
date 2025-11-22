@@ -4,15 +4,42 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128G
-#SBATCH --gpus=h200:1
 #SBATCH --time=24:00:00
 #SBATCH --output=grpo_%j.out
 #SBATCH --error=grpo_%j.err
-#SBATCH --partition=marylou13h  # H200 GPUs (141GB each) - best for 7B+14B models
-# Alternative partitions:
-# --partition=marylouGH --gpus=h100:1  # H100 (96GB) - Grace Hopper nodes
-# --partition=marylou13l --gpus=l40s:1  # L40S (48GB) - might be tight for both models
-# For preemption nodes (A100 80GB): remove --partition and add --qos=preempt
+
+# GPU and Partition Configuration
+# Based on BYU's actual partition names (from sinfo output):
+# - m13h: H200 GPUs (141GB) - 4 nodes, 8 GPUs per node
+# - m13l: L40S GPUs (48GB) - 4 nodes, 4 GPUs per node  
+# - mgh: GH200 (Grace Hopper) - 2 nodes, 1 GPU per node
+# - cs2: H100 GPUs (96GB) - 2 nodes, 8 GPUs per node
+# - cs/cssp1/dw: A100 GPUs (80GB) - various nodes, 8 GPUs per node
+# - m9g: P100 GPUs (16GB) - 40 nodes, 4 GPUs per node
+
+# OPTION 1: H200 (RECOMMENDED for 7B+14B models)
+#SBATCH --partition=m13h
+#SBATCH --gres=gpu:h200:1
+
+# OPTION 2: H100 (Alternative for 7B+14B models)
+# Uncomment these and comment out OPTION 1 if H200 is busy:
+# #SBATCH --partition=cs2
+# #SBATCH --gres=gpu:h100:1
+
+# OPTION 3: A100 (Good for 7B+14B, but may be preemptable)
+# #SBATCH --partition=cs
+# #SBATCH --gres=gpu:a100:1
+
+# OPTION 4: L40S (Might be tight for both 7B+14B models)
+# #SBATCH --partition=m13l
+# #SBATCH --gres=gpu:l40s:1
+
+# OPTION 5: Grace Hopper GH200
+# #SBATCH --partition=mgh
+# #SBATCH --gres=gpu:gh200:1
+
+# NOTE: Only ONE partition/GPU combination should be active!
+# Comment out the others. Start with OPTION 1 (m13h with H200).
 
 # Print job information
 echo "Job ID: $SLURM_JOB_ID"
