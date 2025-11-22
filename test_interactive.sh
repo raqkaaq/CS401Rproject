@@ -16,6 +16,11 @@ module load python/3.12  # BYU default, or python/3.11
 export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID
 export HF_HOME=$HOME/.cache/huggingface
 export TRANSFORMERS_CACHE=$HOME/.cache/huggingface
+export HF_DATASETS_CACHE=$HOME/.cache/huggingface/datasets
+# Force offline mode for HuggingFace (use cache only, no internet)
+export HF_HUB_OFFLINE=1
+export HF_DATASETS_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 
 source ~/venv/bin/activate

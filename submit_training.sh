@@ -86,6 +86,8 @@ export TRANSFORMERS_CACHE=$HOME/.cache/huggingface
 export HF_DATASETS_CACHE=$HOME/.cache/huggingface/datasets
 # Force offline mode for HuggingFace (use cache only, no internet)
 export HF_HUB_OFFLINE=1
+export HF_DATASETS_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 
 # Memory and performance settings
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512

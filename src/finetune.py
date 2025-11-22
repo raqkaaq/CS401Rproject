@@ -7,6 +7,7 @@ to download, parse datasets, and train models with reward functions.
 """
 from __future__ import annotations
 from typing import List, Optional
+import os
 from trl import GRPOTrainer, GRPOConfig
 from src.parsers.base_parser import BaseParser
 from src.evaluators.base_evalator import BaseEvaluator
@@ -70,10 +71,24 @@ class Finetune:
         if training_args is None:
             training_args = GRPOConfig(output_dir=f"{model.replace('/', '-')}-GRPO")
         
+        # Check if model exists locally and use local path if available
+        # Models are stored in models/{owner}/{model_name} format
+        model_path = self.model
+        local_model_dir = f"models/{self.model}"
+        if os.path.exists(local_model_dir) and os.path.isfile(os.path.join(local_model_dir, "config.json")):
+            print(f"Using local model from: {local_model_dir}")
+            model_path = local_model_dir
+        else:
+            print(f"Model not found locally at {local_model_dir}, will try HuggingFace Hub")
+            print("Note: On compute nodes without internet, models must be pre-downloaded to models/ directory")
+        
         # Initialize GRPOTrainer
         print("Initializing GRPOTrainer...")
+        # GRPOTrainer will use the model_path (local directory if found, or HuggingFace ID)
+        # With HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1 set in environment,
+        # transformers library will use local cache only
         self.trainer = GRPOTrainer(
-            model=self.model,
+            model=model_path,
             reward_funcs=self.reward_funcs,
             args=training_args,
             train_dataset=self.dataset,
