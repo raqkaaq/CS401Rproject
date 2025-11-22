@@ -129,7 +129,10 @@ python src/main.py \
   --output-dir ./trainer_output \
   --num-epochs 1 \
   --learning-rate 5e-6 \
-  --batch-size 8
+  --batch-size 8 \
+  --save-steps 500 \
+  --save-strategy steps \
+  --logging-steps 10
 
 # Print completion time
 echo "End Time: $(date)"

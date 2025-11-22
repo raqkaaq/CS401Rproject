@@ -51,9 +51,9 @@ print('✓ Basic setup looks good')
 
 echo ""
 echo "If you want to run a full test with 1 sample:"
-echo "  python src/main.py --model Qwen/Qwen2.5-7B-Instruct \\"
+echo "  python src/main.py --model Qwen/Qwen2.5-0.5B-Instruct \\"
 echo "    --parser-type math --evaluator-type math \\"
-echo "    --evaluator-model Qwen/Qwen2.5-14B-Instruct \\"
+echo "    --evaluator-model Qwen/Qwen2.5-0.5B-Instruct \\"
 echo "    --client-type hf --num-samples 1 --batch-size 1 \\"
 echo "    --num-epochs 1 --output-dir ./test_output"
 

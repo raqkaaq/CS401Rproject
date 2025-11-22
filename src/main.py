@@ -105,6 +105,25 @@ def main():
         default=8,
         help="Batch size"
     )
+    parser.add_argument(
+        "--save-steps",
+        type=int,
+        default=500,
+        help="Save checkpoint every N steps (0 to disable intermediate saves)"
+    )
+    parser.add_argument(
+        "--save-strategy",
+        type=str,
+        default="steps",
+        choices=["no", "epoch", "steps"],
+        help="Save strategy: 'no' (only final), 'epoch' (end of each epoch), 'steps' (every N steps)"
+    )
+    parser.add_argument(
+        "--logging-steps",
+        type=int,
+        default=10,
+        help="Log training metrics every N steps"
+    )
     
     args = parser.parse_args()
     
@@ -153,6 +172,9 @@ def main():
         num_train_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.batch_size,
+        save_steps=args.save_steps if args.save_steps > 0 else None,
+        save_strategy=args.save_strategy,
+        logging_steps=args.logging_steps,
     )
     
     # Create finetune instance
