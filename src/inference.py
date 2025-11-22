@@ -213,6 +213,8 @@ class HFClient(LLMClient):
         self.tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
+        # Set left padding for decoder-only models (required for correct generation)
+        self.tokenizer.padding_side = 'left'
 
         # Build kwargs for from_pretrained depending on precision/quantization settings
         model_kwargs = {}
