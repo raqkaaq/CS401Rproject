@@ -7,39 +7,54 @@ echo ""
 
 # Load Python module
 echo "1. Loading Python module..."
-module load python/3.9  # or python/3.10, python/3.11 - check what's available
-if [ $? -ne 0 ]; then
-    echo "   Error: Could not load Python module"
-    echo "   Try: module avail python"
+# BYU has: python/3.12 (default), python/3.11, python/ondemand
+if module load python/3.12 2>/dev/null; then
+    echo "   ✓ Loaded: python/3.12 (default)"
+elif module load python/3.11 2>/dev/null; then
+    echo "   ✓ Loaded: python/3.11"
+else
+    echo "   ✗ Error: Could not load Python module"
+    echo "   Available modules: python/3.12, python/3.11, python/ondemand"
+    echo "   Try: module load python/3.12"
     exit 1
 fi
-echo "   ✓ Python module loaded"
 python --version
 
 # Create virtual environment
 echo ""
 echo "2. Creating virtual environment..."
-if [ -d "$HOME/venv" ]; then
-    echo "   ⚠ Virtual environment already exists at ~/venv"
+echo "   Location options:"
+echo "   - ~/venv (home directory) - RECOMMENDED: shared across all nodes"
+echo "   - ~/scratch/venv (scratch space) - Faster, but may not be shared"
+echo "   - Project directory - If you have project-specific space"
+echo ""
+
+VENV_PATH="$HOME/venv"
+# Uncomment to use scratch space instead:
+# VENV_PATH="$HOME/scratch/venv"
+# mkdir -p "$HOME/scratch"
+
+if [ -d "$VENV_PATH" ]; then
+    echo "   ⚠ Virtual environment already exists at $VENV_PATH"
     read -p "   Do you want to recreate it? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        rm -rf ~/venv
-        python -m venv ~/venv
-        echo "   ✓ Virtual environment recreated"
+        rm -rf "$VENV_PATH"
+        python -m venv "$VENV_PATH"
+        echo "   ✓ Virtual environment recreated at $VENV_PATH"
     else
-        echo "   Using existing virtual environment"
+        echo "   Using existing virtual environment at $VENV_PATH"
     fi
 else
-    python -m venv ~/venv
-    echo "   ✓ Virtual environment created at ~/venv"
+    python -m venv "$VENV_PATH"
+    echo "   ✓ Virtual environment created at $VENV_PATH"
 fi
 
 # Activate virtual environment
 echo ""
 echo "3. Activating virtual environment..."
-source ~/venv/bin/activate
-echo "   ✓ Virtual environment activated"
+source "$VENV_PATH/bin/activate"
+echo "   ✓ Virtual environment activated from $VENV_PATH"
 
 # Upgrade pip
 echo ""
@@ -80,4 +95,7 @@ echo "  2. Test setup: ./test_script.sh"
 echo ""
 echo "Note: The virtual environment will be activated automatically"
 echo "      in your job scripts (submit_training.sh is already configured)"
+echo ""
+echo "VENV_PATH used: $VENV_PATH"
+echo "Update submit_training.sh if you used a different location!"
 

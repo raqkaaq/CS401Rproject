@@ -10,7 +10,7 @@ echo ""
 
 # Load modules (same as in submit_training.sh)
 module load cuda
-module load python/3.9  # Adjust if needed
+module load python/3.12  # BYU default, or python/3.11
 
 # Set environment variables
 export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID

@@ -52,7 +52,10 @@ echo "Working Directory: $(pwd)"
 # Adjust module names based on what's available on BYU's cluster
 # You can check available modules with: module avail
 module load cuda
-module load python/3.9  # or python/3.10, python/3.11 - check what's available
+
+# Load Python module
+# BYU has: python/3.12 (default), python/3.11, python/ondemand
+module load python/3.12  # or python/3.11 if preferred
 
 # Set up Python environment
 # IMPORTANT: You must install packages BEFORE submitting the job!

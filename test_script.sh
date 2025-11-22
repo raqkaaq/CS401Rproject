@@ -17,11 +17,15 @@ fi
 # Check 2: Check if Python environment is set up
 echo ""
 echo "2. Checking Python environment..."
-if command -v python &> /dev/null; then
+# Try to load Python module first
+if module load python/3.12 2>/dev/null || module load python/3.11 2>/dev/null; then
     PYTHON_VERSION=$(python --version 2>&1)
-    echo "   ✓ Python found: $PYTHON_VERSION"
+    echo "   ✓ Python module loaded: $PYTHON_VERSION"
+elif command -v python &> /dev/null; then
+    PYTHON_VERSION=$(python --version 2>&1)
+    echo "   ⚠ Python found in PATH: $PYTHON_VERSION (module not loaded)"
 else
-    echo "   ✗ Python not found! Load module: module load python/3.9"
+    echo "   ✗ Python not found! Load module: module load python/3.12"
     exit 1
 fi
 
