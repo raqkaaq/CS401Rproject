@@ -180,6 +180,8 @@ def main():
         logging_steps=args.logging_steps,
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,  # Required parameter, but only used when save_strategy='steps'
+        bf16=True,  # Enable bf16 for H200/H100 GPUs (Ampere+ architecture)
+        # fp16=False,  # bf16 is preferred for newer GPUs
     )
     
     # Create finetune instance
