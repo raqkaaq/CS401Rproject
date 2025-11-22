@@ -133,6 +133,12 @@ python src/main.py \
   --save-steps 500 \
   --save-strategy steps \
   --logging-steps 10
+# Save options:
+#   --save-strategy steps --save-steps 500    # Save every 500 steps (current)
+#   --save-strategy epoch                     # Save at end of each epoch
+#   --save-strategy no                        # Only save final model
+# Note: To save every N epochs, calculate steps: (dataset_size / batch_size) * N
+#       Then use: --save-strategy steps --save-steps <calculated_steps>
 
 # Print completion time
 echo "End Time: $(date)"

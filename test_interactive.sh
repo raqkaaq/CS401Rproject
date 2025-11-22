@@ -55,5 +55,5 @@ echo "  python src/main.py --model Qwen/Qwen2.5-0.5B-Instruct \\"
 echo "    --parser-type math --evaluator-type math \\"
 echo "    --evaluator-model Qwen/Qwen2.5-0.5B-Instruct \\"
 echo "    --client-type hf --num-samples 1 --batch-size 1 \\"
-echo "    --num-epochs 1 --output-dir ./test_output"
+echo "    --num-epochs 1 --save-steps 1 --output-dir ./test_output"
 

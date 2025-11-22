@@ -107,16 +107,16 @@ def main():
     )
     parser.add_argument(
         "--save-steps",
-        type=int,
+        type=float,
         default=500,
-        help="Save checkpoint every N steps (0 to disable intermediate saves)"
+        help="Save checkpoint every N steps (only used if save-strategy is 'steps')"
     )
     parser.add_argument(
         "--save-strategy",
         type=str,
         default="steps",
         choices=["no", "epoch", "steps"],
-        help="Save strategy: 'no' (only final), 'epoch' (end of each epoch), 'steps' (every N steps)"
+        help="Save strategy: 'no' (only final), 'epoch' (end of each epoch), 'steps' (every N steps via save-steps)"
     )
     parser.add_argument(
         "--logging-steps",
@@ -167,14 +167,19 @@ def main():
         raise ValueError(f"Unknown evaluator type: {args.evaluator_type}")
     
     # Create training config
+    # GRPOConfig save_strategy options: 'no', 'epoch', 'steps'
+    # - 'epoch': saves at end of each epoch (save_steps is ignored)
+    # - 'steps': saves every save_steps steps
+    # - 'no': only saves final model
+    
     training_config = GRPOConfig(
         output_dir=args.output_dir,
         num_train_epochs=args.num_epochs,
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.batch_size,
-        save_steps=args.save_steps if args.save_steps > 0 else None,
-        save_strategy=args.save_strategy,
         logging_steps=args.logging_steps,
+        save_strategy=args.save_strategy,
+        save_steps=args.save_steps,  # Required parameter, but only used when save_strategy='steps'
     )
     
     # Create finetune instance
