@@ -136,6 +136,27 @@ class OllamaClient(LLMClient):
         r = requests.post(f"{self.base_url}/api/generate", json=payload, timeout=self.timeout)
         r.raise_for_status()
         return r.json().get("response", "")
+    
+    def generate_batch(self, model: str, prompts: List[str], temperature: float = 0.0, max_tokens: int = 256) -> List[str]:
+        """Generate text for multiple prompts. For Ollama, this makes parallel requests since the API doesn't support true batching."""
+        import concurrent.futures
+        
+        def generate_single(prompt: str) -> str:
+            payload = {
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": float(temperature), "num_predict": int(max_tokens)},
+            }
+            r = requests.post(f"{self.base_url}/api/generate", json=payload, timeout=self.timeout)
+            r.raise_for_status()
+            return r.json().get("response", "")
+        
+        # Use ThreadPoolExecutor for parallel requests to Ollama
+        # This is much faster than sequential requests
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(prompts), 8)) as executor:
+            results = list(executor.map(generate_single, prompts))
+        return results
     #might use this?
     def embeddings(self, model: str, inputs: List[str]) -> dict:
         """Call the embeddings endpoint and return raw JSON.
@@ -272,6 +293,45 @@ class HFClient(LLMClient):
                 use_cache=bool(use_cache),
             )
         return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+    
+    def generate_batch(
+        self,
+        model_id: str,
+        prompts: List[str],
+        max_new_tokens: int = 64,
+        do_sample: bool = False,
+        top_k: int = 50,
+        top_p: float = 1.0,
+        use_cache: bool = True,
+    ) -> List[str]:
+        """Generate text for multiple prompts in batch. Much faster than calling generate() multiple times."""
+        if self.model is None or self.tokenizer is None:
+            self.warmup_model(model_id)
+        # Tokenize all prompts at once with padding
+        toks = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True)
+        toks = {k: v.to(self.device) for k, v in toks.items()}
+        input_lengths = toks.get("input_ids").shape[1]
+        # Use inference_mode for faster inference when gradients aren't needed
+        with torch.inference_mode():
+            outputs = self.model.generate(
+                input_ids=toks.get("input_ids"),
+                attention_mask=toks.get("attention_mask"),
+                max_new_tokens=int(max_new_tokens),
+                do_sample=bool(do_sample),
+                top_k=int(top_k),
+                top_p=float(top_p),
+                use_cache=bool(use_cache),
+            )
+        # Decode all outputs, extracting only the newly generated tokens
+        generated_texts = []
+        for i, output in enumerate(outputs):
+            # Get the input length for this specific prompt (accounting for padding)
+            # Find where the actual input ends (not padding)
+            input_len = (toks.get("attention_mask")[i] == 1).sum().item()
+            # Extract only the newly generated tokens (after the input)
+            generated_tokens = output[input_len:]
+            generated_texts.append(self.tokenizer.decode(generated_tokens, skip_special_tokens=True))
+        return generated_texts
     
     def embeddings(self, model_id: str, inputs: List[str]) -> dict:
         if self.model is None or self.tokenizer is None:

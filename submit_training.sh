@@ -117,7 +117,13 @@ echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available()
 cd "$SLURM_SUBMIT_DIR" || cd ~/CS401Rproject || pwd
 echo "Working directory: $(pwd)"
 
-# Run training
+# Run training with accelerate
+# Accelerate provides:
+#   - Better GPU memory management
+#   - Optimized mixed precision training (bf16/fp16)
+#   - Multi-GPU support (if configured)
+#   - Gradient accumulation optimization
+#
 # Note: Using --client-type hf to force HuggingFace client (Ollama won't be available on compute nodes)
 # When using HF client, --evaluator-model should use HuggingFace format (e.g., "Qwen/Qwen2.5-0.5B-Instruct")
 # When using Ollama client, use Ollama format (e.g., "qwen2.5:0.5b-instruct")
@@ -127,7 +133,10 @@ echo "Working directory: $(pwd)"
 #   - checkpoint-{step}/ directories (if save_steps is configured)
 #   - Final model files (config.json, model files, tokenizer files)
 #   - Training logs and metrics
-python src/main.py \
+#
+# To use accelerate, we use 'accelerate launch' instead of 'python'
+# Accelerate will automatically detect GPU configuration and optimize accordingly
+accelerate launch src/main.py \
   --model Qwen/Qwen2.5-7B-Instruct \
   --parser-type math \
   --evaluator-type math \

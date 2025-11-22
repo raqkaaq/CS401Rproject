@@ -45,14 +45,26 @@ class MathEvaluator(BaseEvaluator):
         """
         solution = kwargs.get("solution", None)
 
+        # Extract all prompt strings for batch processing
+        prompt_strings = []
+        for rewritten_prompt in rewritten_prompts:
+            # Handle both string format and list-of-dicts format
+            if isinstance(rewritten_prompt, str):
+                prompt_strings.append(rewritten_prompt)
+            elif isinstance(rewritten_prompt, list) and len(rewritten_prompt) > 0:
+                # Extract content from dict format
+                if isinstance(rewritten_prompt[0], dict) and "content" in rewritten_prompt[0]:
+                    prompt_strings.append(rewritten_prompt[0]["content"])
+                else:
+                    prompt_strings.append(str(rewritten_prompt[0]))
+            else:
+                prompt_strings.append(str(rewritten_prompt))
 
+        # Batch inference - much faster than sequential calls
+        base_llm_outputs = self.pass_to_inference_batch(prompt_strings, **kwargs)
+        
         # Format completions for accuracy_reward: it expects [[{"content": "..."}], ...]
-        formatted_completions = []
-
-        for rewritten_prompt_string in rewritten_prompts:
-            base_llm_output = self.pass_to_inference(rewritten_prompt_string, **kwargs)
-            # accuracy_reward expects format: [[{"content": "..."}], ...]
-            formatted_completions.append([{"content": base_llm_output}])
+        formatted_completions = [[{"content": output}] for output in base_llm_outputs]
         
         rewards = accuracy_reward(formatted_completions, solution)
         print("Rewards: ", rewards)

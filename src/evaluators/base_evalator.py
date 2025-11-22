@@ -99,6 +99,37 @@ class BaseEvaluator(ABC):
             # Fallback: try the base LLMClient interface
             return self.client.generate(model=self.model, prompt=prompt, temperature=self.temperature, max_tokens=self.max_tokens)
     
+    def pass_to_inference_batch(self, prompts: List[str], **kwargs) -> List[str]:
+        """
+        Pass multiple prompts to the inference client in batch for faster processing.
+
+        Args:
+            prompts: List of prompt strings to send to the model
+            **kwargs: Additional keyword arguments (e.g., temperature, max_tokens, max_new_tokens)
+
+        Returns:
+            List of generated response strings from the base LLM
+        """
+        # Check if client is OllamaClient or HFClient and call appropriate batch method
+        client_type = type(self.client).__name__
+        
+        if client_type == 'OllamaClient':
+            return self.client.generate_batch(
+                model=self.model,
+                prompts=prompts,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens
+            )
+        elif client_type == 'HFClient':
+            return self.client.generate_batch(
+                model_id=self.model,
+                prompts=prompts,
+                max_new_tokens=self.max_tokens
+            )
+        else:
+            # Fallback: call generate() multiple times (not batched, but works)
+            return [self.pass_to_inference(prompt, **kwargs) for prompt in prompts]
+    
     def reward_function(self, completions: List[List[Dict[str, str]]], **kwargs) -> List[float]:
         """
         Reward function to be used by the GRPOTrainer.
