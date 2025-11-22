@@ -257,6 +257,8 @@ class PRewriteTrainer:
             tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
+            # Set left padding for decoder-only models (required for correct generation)
+            tokenizer.padding_side = 'left'
             base_config = GenerationConfig.from_pretrained(local_dir)
             
             # Load the policy model (with value head for PPO)
