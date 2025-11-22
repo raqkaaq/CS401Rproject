@@ -2,7 +2,17 @@
 # Setup script to install packages before submitting jobs
 # Run this ONCE on the login node before submitting your first job
 
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Change to script directory (project directory)
+cd "$SCRIPT_DIR" || {
+    echo "Error: Could not change to script directory: $SCRIPT_DIR"
+    exit 1
+}
+
 echo "=== Setting up Python Environment ==="
+echo "Working directory: $(pwd)"
 echo ""
 
 # Load Python module
@@ -65,12 +75,21 @@ echo "   ✓ pip upgraded"
 # Install packages
 echo ""
 echo "5. Installing packages from requirements.txt..."
-if [ ! -f "requirements.txt" ]; then
-    echo "   ✗ requirements.txt not found!"
-    exit 1
+REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
+if [ ! -f "$REQUIREMENTS_FILE" ]; then
+    # Try current directory as fallback
+    if [ -f "requirements.txt" ]; then
+        REQUIREMENTS_FILE="requirements.txt"
+    else
+        echo "   ✗ requirements.txt not found!"
+        echo "   Expected location: $REQUIREMENTS_FILE"
+        echo "   Current directory: $(pwd)"
+        exit 1
+    fi
 fi
+echo "   Using: $REQUIREMENTS_FILE"
 
-pip install -r requirements.txt
+pip install -r "$REQUIREMENTS_FILE"
 if [ $? -eq 0 ]; then
     echo "   ✓ All packages installed successfully"
 else
