@@ -4,16 +4,52 @@ from collections import Counter
 import math
 
 class BaseEvaluator(ABC):
-    def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 256):
+    def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 256, 
+                 prefer_client: str = "auto"):
+        """
+        Initialize the BaseEvaluator.
+        
+        Args:
+            model: Model identifier (Ollama format for OllamaClient, HF format for HFClient)
+            client: Optional client instance. If None, will auto-detect based on prefer_client.
+            temperature: Temperature for generation
+            max_tokens: Maximum tokens for generation
+            prefer_client: Preferred client type. Options:
+                - "auto": Try Ollama first, fall back to HFClient if unavailable
+                - "ollama": Force OllamaClient (will raise error if unavailable)
+                - "hf": Force HFClient
+        """
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
 
         if client is None:
-            # Default to OllamaClient if no client is provided
-            from ..inference import OllamaClient
-            self.client = OllamaClient()
-            self.client.warmup_model(self.model)
+            from ..inference import OllamaClient, HFClient
+            
+            if prefer_client == "hf":
+                # Force HFClient
+                print("Using HFClient (forced)")
+                self.client = HFClient()
+                self.client.warmup_model(self.model)
+            elif prefer_client == "ollama":
+                # Force OllamaClient
+                print("Using OllamaClient (forced)")
+                self.client = OllamaClient()
+                if not self.client.is_healthy():
+                    raise RuntimeError("Ollama is not available but 'ollama' was specified as prefer_client")
+                self.client.warmup_model(self.model)
+            else:
+                # Auto-detect: try Ollama first, fall back to HFClient
+                print("Auto-detecting client...")
+                ollama_client = OllamaClient()
+                if ollama_client.is_healthy():
+                    print("Ollama is available, using OllamaClient")
+                    self.client = ollama_client
+                    self.client.warmup_model(self.model)
+                else:
+                    print("Ollama is not available, falling back to HFClient")
+                    self.client = HFClient()
+                    self.client.warmup_model(self.model)
         else:
             self.client = client
 

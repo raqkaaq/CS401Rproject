@@ -63,7 +63,14 @@ def main():
         "--evaluator-model",
         type=str,
         default="qwen2.5:0.5b-instruct",
-        help="Model to use for evaluation (Ollama format, e.g., 'qwen2.5:0.5b-instruct')"
+        help="Model to use for evaluation (Ollama format for Ollama, e.g., 'qwen2.5:0.5b-instruct', or HF format for HF, e.g., 'Qwen/Qwen2.5-0.5B-Instruct')"
+    )
+    parser.add_argument(
+        "--client-type",
+        type=str,
+        default="auto",
+        choices=["auto", "ollama", "hf"],
+        help="Client type preference: 'auto' (try Ollama, fallback to HF), 'ollama' (force Ollama), 'hf' (force HF)"
     )
     parser.add_argument(
         "--test-mode",
@@ -123,17 +130,19 @@ def main():
     if args.evaluator_type == "test":
         evaluator_instance = TestEvaluator(
             model=args.evaluator_model,
-            client=None,  # Will default to OllamaClient
+            client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
             max_tokens=256,
-            test_mode=args.test_mode
+            test_mode=args.test_mode,
+            prefer_client=args.client_type
         )
     elif args.evaluator_type == "math": 
         evaluator_instance = MathEvaluator(
             model=args.evaluator_model,
-            client=None,  # Will default to OllamaClient
+            client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
-            max_tokens=5012
+            max_tokens=5012,
+            prefer_client=args.client_type
         )
     else:
         raise ValueError(f"Unknown evaluator type: {args.evaluator_type}")

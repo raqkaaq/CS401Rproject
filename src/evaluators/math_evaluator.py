@@ -8,17 +8,19 @@ class MathEvaluator(BaseEvaluator):
     A simple math evaluator for math problems.
     """
     
-    def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 256):
+    def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 256,
+                 prefer_client: str = "auto"):
         """
         Initialize the math evaluator.
         
         Args:
             model: Model name to use
-            client: Optional client (defaults to OllamaClient if None)
+            client: Optional client (defaults to auto-detect if None)
             temperature: Temperature for generation
             max_tokens: Maximum tokens for generation
+            prefer_client: Client preference ("auto", "ollama", or "hf")
         """
-        super().__init__(model, client, temperature, max_tokens)
+        super().__init__(model, client, temperature, max_tokens, prefer_client=prefer_client)
 
     def evaluate(self, base_llm_output: str, **kwargs) -> float:
         """
