@@ -55,15 +55,26 @@ module load cuda
 module load python/3.9  # or python/3.10, python/3.11 - check what's available
 
 # Set up Python environment
-# Option 1: If using conda
+# IMPORTANT: You must install packages BEFORE submitting the job!
+# 
+# On the login node, run:
+#   module load python/3.9
+#   python -m venv ~/venv
+#   source ~/venv/bin/activate
+#   pip install --upgrade pip
+#   pip install -r requirements.txt
+#
+# Then uncomment ONE of the options below:
+
+# Option 1: If using venv (RECOMMENDED)
+source ~/venv/bin/activate
+
+# Option 2: If using conda
 # source ~/.bashrc
 # conda activate your_env_name
 
-# Option 2: If using venv (create it in your home directory first)
-# source ~/venv/bin/activate
-
-# Option 3: If Python packages are installed via module
-# (Some clusters have pre-installed packages)
+# Option 3: If Python packages are installed system-wide (unlikely)
+# (No activation needed, but packages must be installed)
 
 # Set environment variables
 export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID
