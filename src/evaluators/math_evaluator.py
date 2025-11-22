@@ -61,7 +61,9 @@ class MathEvaluator(BaseEvaluator):
                 prompt_strings.append(str(rewritten_prompt))
 
         # Batch inference - much faster than sequential calls
-        base_llm_outputs = self.pass_to_inference_batch(prompt_strings, **kwargs)
+        # Filter out 'prompts' from kwargs to avoid conflict with the prompts parameter
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'prompts'}
+        base_llm_outputs = self.pass_to_inference_batch(prompt_strings, **filtered_kwargs)
         
         # Format completions for accuracy_reward: it expects [[{"content": "..."}], ...]
         formatted_completions = [[{"content": output}] for output in base_llm_outputs]
