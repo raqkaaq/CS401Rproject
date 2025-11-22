@@ -178,7 +178,17 @@ class HFClient(LLMClient):
     def warmup_model(self, model_id: str):
         local_dir = f"models/{model_id}"
         if model_id not in self.list_models():
-            download_model(model_id, local_dir)
+            # Check if we're on a compute node (no internet)
+            # Try to download, but handle network errors gracefully
+            try:
+                download_model(model_id, local_dir)
+            except Exception as e:
+                if "Network" in str(e) or "unreachable" in str(e) or "Connection" in str(e):
+                    raise RuntimeError(
+                        f"Model {model_id} not found locally and cannot download (no internet on compute node). "
+                        f"Please pre-download models on login node using: ./download_models.sh"
+                    ) from e
+                raise
         self.tokenizer = AutoTokenizer.from_pretrained(local_dir, use_fast=True)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token

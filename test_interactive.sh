@@ -1,7 +1,7 @@
 #!/bin/bash
 # Interactive test script - run this in an salloc session
 # Usage: 
-#   1. Request interactive session: salloc --partition=m13h --gres=gpu:h200:1 --time=1:00:00
+#   1. Request interactive session: salloc --partition=m13h --gres=gpu:h200:1 --time=1:00:00 --mem=128G --cpus-per-task=16
 #   2. Run this script: ./test_interactive.sh
 
 echo "=== Interactive Test Mode ==="

@@ -121,5 +121,5 @@ echo "=== Test Summary ==="
 echo "If all checks passed, your script should be ready to submit!"
 echo ""
 echo "To submit: sbatch submit_training.sh"
-echo "To test in interactive session: salloc --partition=m13h --gres=gpu:h200:1 --time=1:00:00"
+echo "To test in interactive session: salloc --partition=m13h --gres=gpu:h200:1 --time=1:00:00 --mem=128G --cpus-per-task=16"
 

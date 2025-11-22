@@ -73,19 +73,46 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 2. Pre-download Models
+### 2. Pre-download Models (REQUIRED)
 
-Before submitting your job, download models to avoid network issues on compute nodes:
+**IMPORTANT**: Compute nodes don't have internet access. You MUST pre-download models on the login node before submitting jobs.
 
+**Option 1: Use the download script (RECOMMENDED)**
 ```bash
-# In an interactive session or on login node (if allowed)
-python -c "from src.inference import download_model; download_model('Qwen/Qwen2.5-0.5B-Instruct', 'models/Qwen/Qwen2.5-0.5B-Instruct')"
+# On login node (has internet access)
+./download_models.sh
 ```
 
-Or use an interactive job:
+**Option 2: Manual download**
 ```bash
-salloc --gpus=1 --time=1:00:00
-# Then download models
+# On login node
+module load python/3.12
+source ~/venv/bin/activate
+
+# Download models
+python -c "
+from huggingface_hub import snapshot_download
+import os
+
+models = [
+    'Qwen/Qwen2.5-7B-Instruct',
+    'Qwen/Qwen2.5-14B-Instruct'
+]
+
+for model_id in models:
+    local_dir = f'models/{model_id}'
+    os.makedirs(local_dir, exist_ok=True)
+    print(f'Downloading {model_id}...')
+    snapshot_download(repo_id=model_id, local_dir=local_dir)
+    print(f'✓ Downloaded {model_id}')
+"
+```
+
+**Option 3: Interactive session (if login node doesn't allow downloads)**
+```bash
+salloc --partition=m13h --gres=gpu:h200:1 --time=1:00:00 --mem=128G --cpus-per-task=16
+# Then run download_models.sh or manual download
+exit  # Release resources after download
 ```
 
 ### 3. Customize the Slurm Script
