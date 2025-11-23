@@ -150,7 +150,7 @@ accelerate launch --mixed_precision=bf16 src/main.py \
   --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Use illustrative description if needed. Output the new instruction only." \
   --learning-rate 5e-6 \
   --batch-size 64 \
-  --num-samples 30000 \
+  --num-samples 10000 \
   --save-steps 50 \
   --save-strategy steps \
   --logging-steps 10
