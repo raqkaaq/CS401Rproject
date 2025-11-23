@@ -147,7 +147,7 @@ accelerate launch src/main.py \
   --output-dir ./trainer_output \
   --num-epochs 4 \
   --learning-rate 5e-6 \
-  --batch-size 8 \
+  --batch-size 128 \
   --num-samples 2000 \
   --save-steps 250 \
   --save-strategy steps \
