@@ -98,16 +98,6 @@ export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
 set -e  # Exit on error
 set -u  # Exit on undefined variable
 
-# Print GPU information
-echo "GPU Information:"
-nvidia-smi
-echo ""
-echo "Requested Resources:"
-echo "  GPUs: $SLURM_GPUS"
-echo "  CPUs: $SLURM_CPUS_PER_TASK"
-echo "  Memory: $SLURM_MEM_PER_NODE"
-echo "  Partition: $SLURM_JOB_PARTITION"
-
 # Print Python and package versions
 echo "Python version: $(python --version)"
 echo "PyTorch version: $(python -c 'import torch; print(torch.__version__)')"
