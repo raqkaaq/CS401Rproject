@@ -19,7 +19,7 @@
 
 # OPTION 1: H200 (RECOMMENDED for 7B+14B models)
 #SBATCH --partition=m13h
-#SBATCH --gres=gpu:h200:3
+#SBATCH --gres=gpu:h200:4
 
 # OPTION 2: H100 (Alternative for 7B+14B models)
 # Uncomment these and comment out OPTION 1 if H200 is busy:
@@ -148,9 +148,9 @@ accelerate launch src/main.py \
   --num-epochs 4 \
   --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Use illustrative description if needed. Output the new instruction only." \
   --learning-rate 5e-6 \
-  --batch-size 8 \
+  --batch-size 128 \
   --num-samples 10000 \
-  --save-steps 500 \
+  --save-steps 100 \
   --save-strategy steps \
   --logging-steps 10
 # Save options:
