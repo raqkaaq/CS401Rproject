@@ -2,7 +2,7 @@
 #SBATCH --job-name=grpo_training
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=8
 #SBATCH --mem=128G
 #SBATCH --time=24:00:00
 #SBATCH --output=grpo_%j.out
@@ -19,7 +19,7 @@
 
 # OPTION 1: H200 (RECOMMENDED for 7B+14B models)
 #SBATCH --partition=m13h
-#SBATCH --gres=gpu:h200:1
+#SBATCH --gres=gpu:h200:3
 
 # OPTION 2: H100 (Alternative for 7B+14B models)
 # Uncomment these and comment out OPTION 1 if H200 is busy:
@@ -137,13 +137,13 @@ echo "Working directory: $(pwd)"
 # To use accelerate, we use 'accelerate launch' instead of 'python'
 # Accelerate will automatically detect GPU configuration and optimize accordingly
 accelerate launch src/main.py \
-  --model Qwen/Qwen2.5-7B-Instruct \
+  --model Qwen/Qwen2.5-0.5B-Instruct \
   --parser-type math \
   --evaluator-type math \
-  --evaluator-model Qwen/Qwen2.5-14B-Instruct \
+  --evaluator-model Qwen/Qwen2.5-7B-Instruct \
   --client-type hf \
   --output-dir ./trainer_output \
-  --num-epochs 1 \
+  --num-epochs 4 \
   --learning-rate 5e-6 \
   --batch-size 8 \
   --save-steps 500 \
