@@ -146,10 +146,11 @@ accelerate launch src/main.py \
   --client-type hf \
   --output-dir ./trainer_output \
   --num-epochs 4 \
+  --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Use illustrative description if needed. Output the new instruction only." \
   --learning-rate 5e-6 \
-  --batch-size 128 \
-  --num-samples 2000 \
-  --save-steps 250 \
+  --batch-size 8 \
+  --num-samples 10000 \
+  --save-steps 500 \
   --save-strategy steps \
   --logging-steps 10
 # Save options:
