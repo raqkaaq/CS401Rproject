@@ -112,6 +112,15 @@ echo "  Partition: $SLURM_JOB_PARTITION"
 echo "Python version: $(python --version)"
 echo "PyTorch version: $(python -c 'import torch; print(torch.__version__)')"
 echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available())')"
+if python -c 'import torch; print(torch.cuda.is_available())' | grep -q True; then
+    echo "CUDA device count: $(python -c 'import torch; print(torch.cuda.device_count())')"
+    echo "CUDA device name: $(python -c 'import torch; print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\")')"
+fi
+
+# Check accelerate configuration
+echo ""
+echo "Accelerate configuration:"
+accelerate env || echo "  (accelerate env not available, will use defaults)"
 
 # Change to project directory (adjust path as needed)
 # If running from project root, this may not be necessary
@@ -138,7 +147,9 @@ echo "Working directory: $(pwd)"
 #
 # To use accelerate, we use 'accelerate launch' instead of 'python'
 # Accelerate will automatically detect GPU configuration and optimize accordingly
-accelerate launch src/main.py \
+# For single GPU, accelerate auto-detects. For multi-GPU, configure with: accelerate config
+# Explicitly set mixed precision to bf16 for GPU training (H200/H100/A100 support bf16)
+accelerate launch --mixed_precision=bf16 src/main.py \
   --model Qwen/Qwen2.5-0.5B-Instruct \
   --parser-type math \
   --evaluator-type math \

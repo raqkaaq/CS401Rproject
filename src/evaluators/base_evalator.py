@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Tuple, Optional, Dict, Any
 from collections import Counter
 import math
+import torch
 
 class BaseEvaluator(ABC):
     def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 256, 
@@ -29,7 +30,11 @@ class BaseEvaluator(ABC):
             if prefer_client == "hf":
                 # Force HFClient
                 print("Using HFClient (forced)")
-                self.client = HFClient()
+                # Use bf16 for GPU inference if available (faster and more memory efficient)
+                torch_dtype = "bf16" if torch.cuda.is_available() else None
+                if torch_dtype:
+                    print(f"  Using {torch_dtype} precision for GPU inference")
+                self.client = HFClient(torch_dtype=torch_dtype)
                 self.client.warmup_model(self.model)
             elif prefer_client == "ollama":
                 # Force OllamaClient
@@ -48,7 +53,11 @@ class BaseEvaluator(ABC):
                     self.client.warmup_model(self.model)
                 else:
                     print("Ollama is not available, falling back to HFClient")
-                    self.client = HFClient()
+                    # Use bf16 for GPU inference if available (faster and more memory efficient)
+                    torch_dtype = "bf16" if torch.cuda.is_available() else None
+                    if torch_dtype:
+                        print(f"  Using {torch_dtype} precision for GPU inference")
+                    self.client = HFClient(torch_dtype=torch_dtype)
                     self.client.warmup_model(self.model)
         else:
             self.client = client

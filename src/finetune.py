@@ -8,6 +8,7 @@ to download, parse datasets, and train models with reward functions.
 from __future__ import annotations
 from typing import List, Optional
 import os
+import torch
 from trl import GRPOTrainer, GRPOConfig
 from src.parsers.base_parser import BaseParser
 from src.evaluators.base_evalator import BaseEvaluator
@@ -82,17 +83,38 @@ class Finetune:
             print(f"Model not found locally at {local_model_dir}, will try HuggingFace Hub")
             print("Note: On compute nodes without internet, models must be pre-downloaded to models/ directory")
         
+        # Check GPU availability
+        if torch.cuda.is_available():
+            print(f"CUDA is available. GPU count: {torch.cuda.device_count()}")
+            for i in range(torch.cuda.device_count()):
+                print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
+        else:
+            print("Warning: CUDA is not available. Training will run on CPU (very slow).")
+            print("Make sure you're running on a GPU node and CUDA module is loaded.")
+        
         # Initialize GRPOTrainer
         print("Initializing GRPOTrainer...")
         # GRPOTrainer will use the model_path (local directory if found, or HuggingFace ID)
         # With HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1 set in environment,
         # transformers library will use local cache only
+        # GRPOTrainer will automatically use GPU via accelerate if available
         self.trainer = GRPOTrainer(
             model=model_path,
             reward_funcs=self.reward_funcs,
             args=training_args,
             train_dataset=self.dataset,
         )
+        
+        # Verify model is on GPU (if available)
+        if torch.cuda.is_available() and hasattr(self.trainer, 'model'):
+            try:
+                model_device = next(self.trainer.model.parameters()).device
+                if model_device.type == "cuda":
+                    print(f"✓ Model is on GPU: {model_device}")
+                else:
+                    print(f"⚠ Warning: Model is on {model_device}, expected CUDA")
+            except Exception as e:
+                print(f"Could not verify model device: {e}")
     
     def train(self):
         """Start training the model."""

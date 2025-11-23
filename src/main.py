@@ -5,6 +5,7 @@ Main entry point for GRPO fine-tuning using parsers and evaluators.
 import argparse
 import sys
 from pathlib import Path
+import torch
 
 # Add project root to path so imports work
 project_root = Path(__file__).parent.parent
@@ -134,6 +135,28 @@ def main():
     
     args = parser.parse_args()
     
+    # Verify GPU availability
+    if torch.cuda.is_available():
+        print(f"✓ CUDA is available")
+        print(f"  GPU count: {torch.cuda.device_count()}")
+        for i in range(torch.cuda.device_count()):
+            print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
+            print(f"    Memory: {torch.cuda.get_device_properties(i).total_memory / 1024**3:.2f} GB")
+    else:
+        print("⚠ Warning: CUDA is not available!")
+        print("  Training will run on CPU (very slow).")
+        print("  Make sure you're running on a GPU node with CUDA module loaded.")
+        # In non-interactive mode (SLURM jobs), continue anyway but warn
+        import sys
+        if sys.stdin.isatty():
+            # Interactive mode - ask user
+            response = input("Continue anyway? (y/n): ")
+            if response.lower() != 'y':
+                sys.exit(1)
+        else:
+            # Non-interactive mode (SLURM) - warn and continue
+            print("  Continuing in non-interactive mode (SLURM job)...")
+    
     # Create parser
     print(f"Creating {args.parser_type} parser...")
     if args.parser_type == "test":
@@ -179,6 +202,7 @@ def main():
     # - 'steps': saves every save_steps steps
     # - 'no': only saves final model
     
+    # Configure training with GPU optimizations
     training_config = GRPOConfig(
         output_dir=args.output_dir,
         num_train_epochs=args.num_epochs,
@@ -187,8 +211,9 @@ def main():
         logging_steps=args.logging_steps,
         save_strategy=args.save_strategy,
         save_steps=args.save_steps,  # Required parameter, but only used when save_strategy='steps'
-        bf16=True,  # Enable bf16 for H200/H100 GPUs (Ampere+ architecture)
+        bf16=torch.cuda.is_available(),  # Enable bf16 only if GPU is available (H200/H100/A100 support bf16)
         # fp16=False,  # bf16 is preferred for newer GPUs
+        dataloader_pin_memory=torch.cuda.is_available(),  # Pin memory for faster GPU data transfer
     )
     
     # Create finetune instance

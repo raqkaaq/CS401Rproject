@@ -13,7 +13,7 @@ from typing import List, Optional, Iterator, Any, Tuple
 import torch
 from trl import AutoModelForCausalLMWithValueHead
 from copy import deepcopy
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 import os
 
 
@@ -232,16 +232,18 @@ class HFClient(LLMClient):
             model_kwargs["torch_dtype"] = dtype_map.get(dt, None)
 
         # Load model with chosen options
+        # Use AutoModelForCausalLM (not WithValueHead) for evaluation/inference
+        # ValueHead is only needed for PPO training, not for evaluation
         try:
             load_kwargs = {k: v for k, v in model_kwargs.items() if v is not None}
             if load_kwargs:
-                self.model = AutoModelForCausalLMWithValueHead.from_pretrained(local_dir, **load_kwargs)
+                self.model = AutoModelForCausalLM.from_pretrained(local_dir, **load_kwargs)
             else:
-                self.model = AutoModelForCausalLMWithValueHead.from_pretrained(local_dir)
+                self.model = AutoModelForCausalLM.from_pretrained(local_dir)
         except Exception as e:
             # Fallback to default load if specialized load fails
             print(f"Model load with kwargs {model_kwargs} failed: {e}. Falling back to default load.")
-            self.model = AutoModelForCausalLMWithValueHead.from_pretrained(local_dir)
+            self.model = AutoModelForCausalLM.from_pretrained(local_dir)
 
         # If model wasn't placed on device_map auto (i.e., load_in_8bit False), move to desired device
         try:
@@ -249,10 +251,22 @@ class HFClient(LLMClient):
             if first_param.device.type == "cpu" and self.device.type == "cuda":
                 try:
                     self.model.to(self.device)
-                except Exception:
-                    pass
+                    print(f"Model moved to {self.device}")
+                except Exception as e:
+                    print(f"Warning: Failed to move model to {self.device}: {e}")
         except StopIteration:
             pass
+        
+        # Verify model is on correct device
+        if self.model is not None:
+            try:
+                first_param = next(self.model.parameters())
+                if self.device.type == "cuda" and first_param.device.type != "cuda":
+                    print(f"Warning: Model is on {first_param.device}, expected {self.device}")
+                else:
+                    print(f"Model loaded on device: {first_param.device}")
+            except StopIteration:
+                pass
 
         # Prepare model for inference
         try:
