@@ -80,7 +80,9 @@ source ~/venv/bin/activate
 # (No activation needed, but packages must be installed)
 
 # Set environment variables
-export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID
+# NOTE: If using multi-GPU (--gres=gpu:h200:3), comment out CUDA_VISIBLE_DEVICES
+# to let accelerate handle all GPUs. For single GPU, uncomment it.
+# export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID
 export HF_HOME=$HOME/.cache/huggingface
 export TRANSFORMERS_CACHE=$HOME/.cache/huggingface
 export HF_DATASETS_CACHE=$HOME/.cache/huggingface/datasets
@@ -140,13 +142,14 @@ accelerate launch src/main.py \
   --model Qwen/Qwen2.5-0.5B-Instruct \
   --parser-type math \
   --evaluator-type math \
-  --evaluator-model Qwen/Qwen2.5-7B-Instruct \
+  --evaluator-model Qwen/Qwen2.5-0.5B-Instruct \
   --client-type hf \
   --output-dir ./trainer_output \
   --num-epochs 4 \
   --learning-rate 5e-6 \
   --batch-size 8 \
-  --save-steps 500 \
+  --num-samples 2000 \
+  --save-steps 250 \
   --save-strategy steps \
   --logging-steps 10
 # Save options:
