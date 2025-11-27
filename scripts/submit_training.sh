@@ -92,7 +92,7 @@ export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
 # Memory and performance settings
-export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+export PYTORCH_ALLOC_CONF=max_split_size_mb:512
 
 # Enable better error reporting
 set -e  # Exit on error
@@ -104,7 +104,7 @@ echo "PyTorch version: $(python -c 'import torch; print(torch.__version__)')"
 echo "CUDA available: $(python -c 'import torch; print(torch.cuda.is_available())')"
 if python -c 'import torch; print(torch.cuda.is_available())' | grep -q True; then
     echo "CUDA device count: $(python -c 'import torch; print(torch.cuda.device_count())')"
-    echo "CUDA device name: $(python -c 'import torch; print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\")')"
+    echo "CUDA device name: $(python -c 'import torch; print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else "N/A")')"
 fi
 
 # Check accelerate configuration
@@ -157,9 +157,9 @@ accelerate launch --mixed_precision=bf16 src/main.py \
   --num-epochs 4 \
   --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Use illustrative description if needed. Output the new instruction only." \
   --learning-rate 5e-6 \
-  --batch-size 64 \
+  --batch-size 32 \
   --num-samples 10000 \
-  --save-steps 50 \
+  --save-steps 25 \
   --save-strategy steps \
   --logging-steps 10
 # Save options:
