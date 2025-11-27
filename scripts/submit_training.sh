@@ -154,11 +154,11 @@ accelerate launch --mixed_precision=bf16 src/main.py \
   --evaluator-model Qwen/Qwen2.5-0.5B-Instruct \
   --client-type hf \
   --output-dir ./poem_output \
-  --num-epochs 4 \
+  --num-epochs 10 \
   --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Use illustrative description if needed. Output the new instruction only." \
   --learning-rate 5e-6 \
   --batch-size 32 \
-  --num-samples 10000 \
+  --num-samples 1000 \
   --save-steps 25 \
   --save-strategy steps \
   --logging-steps 10
