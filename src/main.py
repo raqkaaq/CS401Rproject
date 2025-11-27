@@ -37,7 +37,7 @@ def main():
         "--parser-type",
         type=str,
         default="test",
-        choices=["test", "math"],
+        choices=["test", "math", "poem"],
         help="Type of parser to use"
     )
     parser.add_argument(

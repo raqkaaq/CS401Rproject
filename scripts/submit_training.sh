@@ -149,8 +149,8 @@ echo "Working directory: $(pwd)"
 # Explicitly set mixed precision to bf16 for GPU training (H200/H100/A100 support bf16)
 accelerate launch --mixed_precision=bf16 src/main.py \
   --model Qwen/Qwen2.5-0.5B-Instruct \
-  --parser-type math \
-  --evaluator-type math \
+  --parser-type poem \
+  --evaluator-type poem \
   --evaluator-model Qwen/Qwen2.5-0.5B-Instruct \
   --client-type hf \
   --output-dir ./trainer_output \
