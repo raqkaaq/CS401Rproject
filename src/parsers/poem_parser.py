@@ -80,7 +80,7 @@ class PoemParser(BaseParser):
             used_combinations.add(pair)
             
             # Create the prompt
-            prompt = f"Write me a haiku about {noun1} and {noun2}"
+            prompt = f"Write me a haiku about {noun1} and {noun2}. Ensure you only output the haiku and no other responses."
             
             dataset_samples.append({
                 "prompt": prompt,
