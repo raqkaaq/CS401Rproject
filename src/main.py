@@ -16,8 +16,10 @@ from trl import GRPOConfig
 from src.finetune import Finetune
 from src.parsers.test_parser import TestParser
 from src.parsers.math_parser import MathParser
+from src.parsers.poem_parser import PoemParser
 from src.evaluators.test_evaluator import TestEvaluator
 from src.evaluators.math_evaluator import MathEvaluator
+from src.evaluators.poem_evaluator import PoemEvaluator
 
 
 def main():
