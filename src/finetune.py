@@ -98,14 +98,30 @@ class Finetune:
         # With HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1 set in environment,
         # transformers library will use local cache only
         # GRPOTrainer will automatically use GPU via accelerate if available
+        
+        # Load tokenizer separately to set padding_side before GRPOTrainer uses it
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+        # Set left padding for decoder-only models (required for correct generation)
+        tokenizer.padding_side = 'left'
+        print(f"✓ Tokenizer configured with padding_side='{tokenizer.padding_side}'")
+        
         self.trainer = GRPOTrainer(
             model=model_path,
+            tokenizer=tokenizer,  # Pass the configured tokenizer
             reward_funcs=self.reward_funcs,
             args=training_args,
             train_dataset=self.dataset,
         )
         
-        # Verify model is on GPU (if available)
+        # Ensure tokenizer padding_side is still set after GRPOTrainer initialization
+        if hasattr(self.trainer, 'tokenizer') and self.trainer.tokenizer is not None:
+            self.trainer.tokenizer.padding_side = 'left'
+            print(f"✓ Verified tokenizer padding_side='{self.trainer.tokenizer.padding_side}'")
+        
+        # Verify model is on GPU and in training mode (if available)
         if torch.cuda.is_available() and hasattr(self.trainer, 'model'):
             try:
                 model_device = next(self.trainer.model.parameters()).device
@@ -113,6 +129,14 @@ class Finetune:
                     print(f"✓ Model is on GPU: {model_device}")
                 else:
                     print(f"⚠ Warning: Model is on {model_device}, expected CUDA")
+                
+                # Verify model is in training mode (for finetuning)
+                is_training = self.trainer.model.training
+                has_grads = any(p.requires_grad for p in self.trainer.model.parameters())
+                if is_training and has_grads:
+                    print(f"✓ Model is in training mode with gradients enabled (ready for finetuning)")
+                else:
+                    print(f"⚠ Warning: Model training mode={is_training}, has_grads={has_grads}")
             except Exception as e:
                 print(f"Could not verify model device: {e}")
     

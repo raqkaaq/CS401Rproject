@@ -2,6 +2,14 @@
 # Script to pre-download datasets before submitting jobs
 # Run this on the LOGIN NODE (which has internet access)
 
+# Get the directory where this script is located and change to project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$PROJECT_ROOT" || {
+    echo "Error: Could not change to project root: $PROJECT_ROOT"
+    exit 1
+}
+
 echo "=== Pre-downloading Datasets ==="
 echo "This script downloads datasets to ~/.cache/huggingface/datasets/"
 echo "Run this on the LOGIN NODE before submitting jobs"

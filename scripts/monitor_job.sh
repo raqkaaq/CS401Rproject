@@ -3,6 +3,14 @@
 # Usage: ./monitor_job.sh [JOB_ID]
 # If no JOB_ID provided, uses the most recent job
 
+# Get the directory where this script is located and change to project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$PROJECT_ROOT" || {
+    echo "Error: Could not change to project root: $PROJECT_ROOT"
+    exit 1
+}
+
 if [ -z "$1" ]; then
     # Get the most recent job ID
     JOB_ID=$(squeue --me --format='%.10i' --noheader | head -1)

@@ -2,7 +2,15 @@
 # Interactive test script - run this in an salloc session
 # Usage: 
 #   1. Request interactive session: salloc --partition=m13h --gres=gpu:h200:1 --time=1:00:00 --mem=128G --cpus-per-task=16
-#   2. Run this script: ./test_interactive.sh
+#   2. Run this script: ./scripts/test_interactive.sh
+
+# Get the directory where this script is located and change to project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$PROJECT_ROOT" || {
+    echo "Error: Could not change to project root: $PROJECT_ROOT"
+    exit 1
+}
 
 echo "=== Interactive Test Mode ==="
 echo "This will test your training setup with minimal data"

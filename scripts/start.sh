@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Get the directory where this script is located and change to project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$PROJECT_ROOT" || {
+    echo "Error: Could not change to project root: $PROJECT_ROOT"
+    exit 1
+}
+
 echo "Select which docker-compose configuration to use:"
 echo ""
 echo "1) Mac (docker-compose-mac.yaml)"

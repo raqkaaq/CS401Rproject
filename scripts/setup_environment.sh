@@ -2,12 +2,11 @@
 # Setup script to install packages before submitting jobs
 # Run this ONCE on the login node before submitting your first job
 
-# Get the directory where this script is located
+# Get the directory where this script is located and change to project root
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-# Change to script directory (project directory)
-cd "$SCRIPT_DIR" || {
-    echo "Error: Could not change to script directory: $SCRIPT_DIR"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$PROJECT_ROOT" || {
+    echo "Error: Could not change to project root: $PROJECT_ROOT"
     exit 1
 }
 
@@ -75,17 +74,12 @@ echo "   ✓ pip upgraded"
 # Install packages
 echo ""
 echo "5. Installing packages from requirements.txt..."
-REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
+REQUIREMENTS_FILE="$PROJECT_ROOT/requirements.txt"
 if [ ! -f "$REQUIREMENTS_FILE" ]; then
-    # Try current directory as fallback
-    if [ -f "requirements.txt" ]; then
-        REQUIREMENTS_FILE="requirements.txt"
-    else
-        echo "   ✗ requirements.txt not found!"
-        echo "   Expected location: $REQUIREMENTS_FILE"
-        echo "   Current directory: $(pwd)"
-        exit 1
-    fi
+    echo "   ✗ requirements.txt not found!"
+    echo "   Expected location: $REQUIREMENTS_FILE"
+    echo "   Current directory: $(pwd)"
+    exit 1
 fi
 echo "   Using: $REQUIREMENTS_FILE"
 
@@ -109,8 +103,8 @@ echo ""
 echo "=== Setup Complete! ==="
 echo ""
 echo "Your environment is ready. You can now:"
-echo "  1. Submit jobs: sbatch submit_training.sh"
-echo "  2. Test setup: ./test_script.sh"
+echo "  1. Submit jobs: sbatch scripts/submit_training.sh"
+echo "  2. Test setup: ./scripts/test_script.sh"
 echo ""
 echo "Note: The virtual environment will be activated automatically"
 echo "      in your job scripts (submit_training.sh is already configured)"

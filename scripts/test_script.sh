@@ -4,13 +4,21 @@
 # NOTE: Some tests may show warnings if run on a machine without GPU/CUDA
 #       This is expected - the actual job will have CUDA loaded
 
+# Get the directory where this script is located and change to project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$PROJECT_ROOT" || {
+    echo "Error: Could not change to project root: $PROJECT_ROOT"
+    exit 1
+}
+
 echo "=== Testing Training Script Setup ==="
 echo "Running on: $(hostname)"
 echo ""
 
 # Check 1: Validate Slurm script syntax
 echo "1. Checking Slurm script syntax..."
-if bash -n submit_training.sh; then
+if bash -n scripts/submit_training.sh; then
     echo "   ✓ Slurm script syntax is valid"
 else
     echo "   ✗ Slurm script has syntax errors!"
@@ -99,8 +107,8 @@ fi
 # Check 7: Validate Slurm partition and GPU request
 echo ""
 echo "7. Validating Slurm resource requests..."
-ACTIVE_PARTITION=$(grep "^#SBATCH --partition=" submit_training.sh | head -1 | cut -d'=' -f2)
-ACTIVE_GPU=$(grep "^#SBATCH --gres=" submit_training.sh | head -1 | cut -d':' -f3)
+ACTIVE_PARTITION=$(grep "^#SBATCH --partition=" scripts/submit_training.sh | head -1 | cut -d'=' -f2)
+ACTIVE_GPU=$(grep "^#SBATCH --gres=" scripts/submit_training.sh | head -1 | cut -d':' -f3)
 
 if [ -n "$ACTIVE_PARTITION" ]; then
     echo "   Partition: $ACTIVE_PARTITION"
@@ -120,6 +128,6 @@ echo ""
 echo "=== Test Summary ==="
 echo "If all checks passed, your script should be ready to submit!"
 echo ""
-echo "To submit: sbatch submit_training.sh"
+echo "To submit: sbatch scripts/submit_training.sh"
 echo "To test in interactive session: salloc --partition=m13h --gres=gpu:h200:1 --time=1:00:00 --mem=128G --cpus-per-task=16"
 

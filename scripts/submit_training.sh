@@ -113,9 +113,17 @@ echo "Accelerate configuration:"
 accelerate env || echo "  (accelerate env not available, will use defaults)"
 
 # Change to project directory (adjust path as needed)
-# If running from project root, this may not be necessary
-# The script will automatically find the project root, but being in the right directory helps
-cd "$SLURM_SUBMIT_DIR" || cd ~/CS401Rproject || pwd
+# Handle both cases: submitted from project root or from scripts/ directory
+if [ -d "$SLURM_SUBMIT_DIR/scripts" ]; then
+    # Submitted from project root
+    cd "$SLURM_SUBMIT_DIR" || cd ~/CS401Rproject || pwd
+elif [ -d "$SLURM_SUBMIT_DIR/../src" ]; then
+    # Submitted from scripts/ directory
+    cd "$SLURM_SUBMIT_DIR/.." || cd ~/CS401Rproject || pwd
+else
+    # Fallback
+    cd "$SLURM_SUBMIT_DIR" || cd ~/CS401Rproject || pwd
+fi
 echo "Working directory: $(pwd)"
 
 # Run training with accelerate

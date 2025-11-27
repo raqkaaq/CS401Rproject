@@ -190,7 +190,7 @@ def main():
             model=args.evaluator_model,
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
-            max_tokens=5012,
+            max_tokens=1024,  # Reduced from 5012 for faster evaluation (math problems rarely need more)
             prefer_client=args.client_type
         )
     else:

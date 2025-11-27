@@ -149,7 +149,7 @@ class MathParser(BaseParser):
         
         # Determine how many samples to use and also randomize the samples
         # Note: self.dataset is already a Dataset (not DatasetDict) because split="train" was used
-        self.dataset = self.dataset.shuffle(seed=42)  # TODO: Make this a random seed
+        self.dataset = self.dataset.shuffle(seed=42)
         num_to_parse = self.num_samples if self.num_samples is not None else len(self.dataset)
         
         parsed_data = []
