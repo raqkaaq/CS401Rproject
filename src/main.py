@@ -171,6 +171,12 @@ def main():
             meta_prompt=args.meta_prompt,
             num_samples=args.num_samples
         )
+    elif args.parser_type == "poem":
+        parser_instance = PoemParser(
+            dataset_name=args.dataset_name,
+            meta_prompt=args.meta_prompt,
+            num_samples=args.num_samples
+        )
     else:
         raise ValueError(f"Unknown parser type: {args.parser_type}")
     
@@ -191,6 +197,14 @@ def main():
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
             max_tokens=1024,  # Reduced from 5012 for faster evaluation (math problems rarely need more)
+            prefer_client=args.client_type
+        )
+    elif args.evaluator_type == "poem":
+        evaluator_instance = PoemEvaluator(
+            model=args.evaluator_model,
+            client=None,  # Will auto-detect based on prefer_client
+            temperature=0.0,
+            max_tokens=256,
             prefer_client=args.client_type
         )
     else:
