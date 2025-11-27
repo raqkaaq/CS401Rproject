@@ -99,27 +99,22 @@ class Finetune:
         # transformers library will use local cache only
         # GRPOTrainer will automatically use GPU via accelerate if available
         
-        # Load tokenizer separately to set padding_side before GRPOTrainer uses it
-        from transformers import AutoTokenizer
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
-        # Set left padding for decoder-only models (required for correct generation)
-        tokenizer.padding_side = 'left'
-        print(f"✓ Tokenizer configured with padding_side='{tokenizer.padding_side}'")
-        
+        # Initialize GRPOTrainer (it will load the tokenizer automatically from the model)
         self.trainer = GRPOTrainer(
             model=model_path,
-            tokenizer=tokenizer,  # Pass the configured tokenizer
             reward_funcs=self.reward_funcs,
             args=training_args,
             train_dataset=self.dataset,
         )
         
-        # Ensure tokenizer padding_side is still set after GRPOTrainer initialization
+        # Configure tokenizer after GRPOTrainer initialization
         if hasattr(self.trainer, 'tokenizer') and self.trainer.tokenizer is not None:
-            self.trainer.tokenizer.padding_side = 'left'
-            print(f"✓ Verified tokenizer padding_side='{self.trainer.tokenizer.padding_side}'")
+            tokenizer = self.trainer.tokenizer
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+            # Set left padding for decoder-only models (required for correct generation)
+            tokenizer.padding_side = 'left'
+            print(f"✓ Tokenizer configured with padding_side='{tokenizer.padding_side}'")
         
         # Verify model is on GPU and in training mode (if available)
         if torch.cuda.is_available() and hasattr(self.trainer, 'model'):
