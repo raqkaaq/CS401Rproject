@@ -64,7 +64,7 @@ def main():
         "--evaluator-type",
         type=str,
         default="test",
-        choices=["test", "math"],
+        choices=["test", "math", "poem"],
         help="Type of evaluator to use"
     )
     parser.add_argument(
