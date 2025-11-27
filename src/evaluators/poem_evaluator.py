@@ -65,4 +65,14 @@ class PoemEvaluator(BaseEvaluator):
         # poetry_score = ...
         # final_score = 0.7 * rhyme_score + 0.3 * poetry_score
 
-        return float(rhyme_score)
+
+        target = 200
+        L = len(base_llm_output.strip())
+        if L <= target:
+            length_score = 1.0
+        else:
+            length_score = max(0.0, 1 - (L - target) / target)
+
+        final_score = 0.3 * length_score + 0.7 * rhyme_score
+
+        return float(final_score)
