@@ -329,19 +329,41 @@ def _evaluate_solution(
         if solution is None:
             return 0.0
         
+        # Handle empty generated solution
+        if not generated_solution or not isinstance(generated_solution, str) or not generated_solution.strip():
+            return 0.0
+        
         # Format for accuracy_reward: expects [[{"content": "..."}], ...]
         formatted_completions = [[{"content": generated_solution}]]
         
-        # accuracy_reward expects solution as a list
+        # accuracy_reward expects solution as a list (same length as completions)
+        # Looking at math_evaluator.py line 71, it passes solution directly which can be a list or single value
         if isinstance(solution, str):
             solution_list = [solution]
         elif isinstance(solution, list):
-            solution_list = solution
+            # Use first element if list has items, otherwise empty string
+            solution_list = [solution[0]] if len(solution) > 0 else [""]
         else:
             solution_list = [str(solution)]
         
-        rewards = accuracy_reward(formatted_completions, solution_list)
-        return float(rewards[0]) if rewards else 0.0
+        try:
+            rewards = accuracy_reward(formatted_completions, solution_list)
+            # accuracy_reward may return a tensor or list
+            if hasattr(rewards, '__len__') and len(rewards) > 0:
+                reward_val = rewards[0] if isinstance(rewards, (list, tuple)) else rewards.item() if hasattr(rewards, 'item') else float(rewards)
+                return float(reward_val)
+            elif isinstance(rewards, (int, float)):
+                return float(rewards)
+            else:
+                return 0.0
+        except Exception as e:
+            print(f"Error in accuracy_reward: {e}")
+            print(f"  formatted_completions: {formatted_completions}")
+            print(f"  solution_list: {solution_list}")
+            print(f"  generated_solution type: {type(generated_solution)}, value: {repr(generated_solution[:100]) if generated_solution else 'None'}")
+            import traceback
+            traceback.print_exc()
+            return 0.0
     elif evaluator_type == "poem":
         # For poem evaluator, use the evaluate method directly
         return evaluator.evaluate(generated_solution, **{k: v for k, v in sample.items() if k != "prompt"})
@@ -363,7 +385,7 @@ def run_evaluation(
     meta_prompt: str = "",
     dataset_name: Optional[str] = None,
     rewriter_max_tokens: int = 1024,
-    inference_max_tokens: int = 1024,
+    inference_max_tokens: int = 5024,
     output_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
@@ -698,19 +720,41 @@ def _evaluate_solution(
         if solution is None:
             return 0.0
         
+        # Handle empty generated solution
+        if not generated_solution or not isinstance(generated_solution, str) or not generated_solution.strip():
+            return 0.0
+        
         # Format for accuracy_reward: expects [[{"content": "..."}], ...]
         formatted_completions = [[{"content": generated_solution}]]
         
-        # accuracy_reward expects solution as a list
+        # accuracy_reward expects solution as a list (same length as completions)
+        # Looking at math_evaluator.py line 71, it passes solution directly which can be a list or single value
         if isinstance(solution, str):
             solution_list = [solution]
         elif isinstance(solution, list):
-            solution_list = solution
+            # Use first element if list has items, otherwise empty string
+            solution_list = [solution[0]] if len(solution) > 0 else [""]
         else:
             solution_list = [str(solution)]
         
-        rewards = accuracy_reward(formatted_completions, solution_list)
-        return float(rewards[0]) if rewards else 0.0
+        try:
+            rewards = accuracy_reward(formatted_completions, solution_list)
+            # accuracy_reward may return a tensor or list
+            if hasattr(rewards, '__len__') and len(rewards) > 0:
+                reward_val = rewards[0] if isinstance(rewards, (list, tuple)) else rewards.item() if hasattr(rewards, 'item') else float(rewards)
+                return float(reward_val)
+            elif isinstance(rewards, (int, float)):
+                return float(rewards)
+            else:
+                return 0.0
+        except Exception as e:
+            print(f"Error in accuracy_reward: {e}")
+            print(f"  formatted_completions: {formatted_completions}")
+            print(f"  solution_list: {solution_list}")
+            print(f"  generated_solution type: {type(generated_solution)}, value: {repr(generated_solution[:100]) if generated_solution else 'None'}")
+            import traceback
+            traceback.print_exc()
+            return 0.0
     elif evaluator_type == "poem":
         # For poem evaluator, use the evaluate method directly
         return evaluator.evaluate(generated_solution, **{k: v for k, v in sample.items() if k != "prompt"})
