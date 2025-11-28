@@ -646,7 +646,7 @@ def main():
     
     args = parser.parse_args()
     
-    # Verify GPU availability
+    # Verify GPU availability   
     if torch.cuda.is_available():
         print(f"✓ CUDA is available")
         print(f"  GPU count: {torch.cuda.device_count()}")
