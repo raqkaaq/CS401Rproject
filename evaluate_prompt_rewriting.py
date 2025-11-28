@@ -12,6 +12,27 @@ This script evaluates if fine-tuning improves prompt rewriting by:
 4. Optionally compares with baseline (original prompt without rewriting)
 5. Collects statistics and saves results
 
+
+For running on GPU no internet:
+
+export HF_HOME=$HOME/.cache/huggingface
+export TRANSFORMERS_CACHE=$HOME/.cache/huggingface
+export HF_DATASETS_CACHE=$HOME/.cache/huggingface/datasets
+# Force offline mode for HuggingFace (use cache only, no internet)
+export HF_HUB_OFFLINE=1
+export HF_DATASETS_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+
+ python evaluate_prompt_rewriting.py \
+        --rewriter-model-dir ./trainer_output/checkpoint-450 \
+        --base-rewriter-model Qwen/Qwen2.5-0.5B-Instruct \
+        --inference-model Qwen/Qwen2.5-0.5B-Instruct \
+        --parser-type math \
+        --evaluator-type math \
+        --num-test-samples 100 \
+        --output-file results.json
+
+
 Example usage:
     # Evaluate a fine-tuned model on math problems
     python evaluate_prompt_rewriting.py \\
@@ -35,6 +56,7 @@ Example usage:
 """
 
 import argparse
+
 import json
 import os
 import sys
@@ -54,6 +76,7 @@ from src.parsers.poem_parser import PoemParser
 from src.evaluators.test_evaluator import TestEvaluator
 from src.evaluators.math_evaluator import MathEvaluator
 from src.evaluators.poem_evaluator import PoemEvaluator
+from trl.rewards import accuracy_reward
 
 
 def load_rewriter_model(model_path: str) -> HFClient:
@@ -282,6 +305,54 @@ def generate_rewritten_prompt(rewriter_client: HFClient, prompt_messages: List[D
     return rewritten
 
 
+def _evaluate_solution(
+    evaluator: Any,
+    generated_solution: str,
+    sample: Dict[str, Any],
+    evaluator_type: str
+) -> float:
+    """
+    Evaluate a generated solution against the gold solution.
+    
+    Args:
+        evaluator: Evaluator instance
+        generated_solution: The generated solution string
+        sample: Sample dictionary containing gold solution
+        evaluator_type: Type of evaluator ("test", "math", "poem")
+    
+    Returns:
+        Reward score (float)
+    """
+    if evaluator_type == "math":
+        # For math evaluator, use accuracy_reward directly
+        solution = sample.get("solution", None)
+        if solution is None:
+            return 0.0
+        
+        # Format for accuracy_reward: expects [[{"content": "..."}], ...]
+        formatted_completions = [[{"content": generated_solution}]]
+        
+        # accuracy_reward expects solution as a list
+        if isinstance(solution, str):
+            solution_list = [solution]
+        elif isinstance(solution, list):
+            solution_list = solution
+        else:
+            solution_list = [str(solution)]
+        
+        rewards = accuracy_reward(formatted_completions, solution_list)
+        return float(rewards[0]) if rewards else 0.0
+    elif evaluator_type == "poem":
+        # For poem evaluator, use the evaluate method directly
+        return evaluator.evaluate(generated_solution, **{k: v for k, v in sample.items() if k != "prompt"})
+    elif evaluator_type == "test":
+        # For test evaluator, use the evaluate method directly
+        return evaluator.evaluate(generated_solution, **{k: v for k, v in sample.items() if k != "prompt"})
+    else:
+        # Default: return 0.0
+        return 0.0
+
+
 def run_evaluation(
     rewriter_model_dir: str,
     base_rewriter_model: str,
@@ -407,16 +478,35 @@ def run_evaluation(
     for i, sample in enumerate(tqdm(test_data, desc="Evaluating")):
         # Extract prompt messages
         prompt_messages = sample.get("prompt", [])
+        
+        # Handle case where prompt_messages might be a string representation
+        if isinstance(prompt_messages, str):
+            try:
+                import ast
+                prompt_messages = ast.literal_eval(prompt_messages)
+            except:
+                print(f"Warning: Sample {i} has invalid prompt format (string that can't be parsed), skipping")
+                continue
+        
         if not prompt_messages:
             print(f"Warning: Sample {i} has no prompt, skipping")
             continue
         
+        if not isinstance(prompt_messages, list):
+            print(f"Warning: Sample {i} prompt is not a list (type: {type(prompt_messages)}), skipping")
+            continue
+        
         # Get original user prompt
         original_user_prompt = None
+        system_prompt = ""
         for msg in prompt_messages:
-            if msg.get("role") == "user":
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role", "")
+            if role == "user":
                 original_user_prompt = msg.get("content", "")
-                break
+            elif role == "system":
+                system_prompt = msg.get("content", "")
         
         if not original_user_prompt:
             print(f"Warning: Sample {i} has no user prompt, skipping")
@@ -430,8 +520,12 @@ def run_evaluation(
                 prompt_messages,
                 max_tokens=rewriter_max_tokens
             )
+            if not rewritten_prompt_finetuned or rewritten_prompt_finetuned.strip() == "":
+                print(f"Warning: Sample {i} - fine-tuned rewriter produced empty output")
         except Exception as e:
             print(f"Error rewriting prompt with fine-tuned model for sample {i}: {e}")
+            import traceback
+            traceback.print_exc()
             rewritten_prompt_finetuned = ""
         
         # Attempt task with rewritten prompt (fine-tuned)
@@ -445,10 +539,16 @@ def run_evaluation(
         
         # Evaluate fine-tuned output
         try:
-            eval_kwargs = {k: v for k, v in sample.items() if k != "prompt"}
-            reward_finetuned = evaluator.reward_function([eval_output_finetuned], **eval_kwargs)[0]
+            reward_finetuned = _evaluate_solution(
+                evaluator,
+                eval_output_finetuned,
+                sample,
+                evaluator_type
+            )
         except Exception as e:
             print(f"Error evaluating fine-tuned output for sample {i}: {e}")
+            import traceback
+            traceback.print_exc()
             reward_finetuned = 0.0
         
         # ===== BASE REWRITER PATH =====
@@ -459,8 +559,12 @@ def run_evaluation(
                 prompt_messages,
                 max_tokens=rewriter_max_tokens
             )
+            if not rewritten_prompt_base or rewritten_prompt_base.strip() == "":
+                print(f"Warning: Sample {i} - base rewriter produced empty output")
         except Exception as e:
             print(f"Error rewriting prompt with base model for sample {i}: {e}")
+            import traceback
+            traceback.print_exc()
             rewritten_prompt_base = ""
         
         # Attempt task with rewritten prompt (base)
@@ -474,10 +578,16 @@ def run_evaluation(
         
         # Evaluate base output
         try:
-            eval_kwargs = {k: v for k, v in sample.items() if k != "prompt"}
-            reward_base = evaluator.reward_function([eval_output_base], **eval_kwargs)[0]
+            reward_base = _evaluate_solution(
+                evaluator,
+                eval_output_base,
+                sample,
+                evaluator_type
+            )
         except Exception as e:
             print(f"Error evaluating base output for sample {i}: {e}")
+            import traceback
+            traceback.print_exc()
             reward_base = 0.0
         
         # Store results
@@ -562,6 +672,54 @@ def run_evaluation(
         print("✓ Results saved")
     
     return final_results
+
+
+def _evaluate_solution(
+    evaluator: Any,
+    generated_solution: str,
+    sample: Dict[str, Any],
+    evaluator_type: str
+) -> float:
+    """
+    Evaluate a generated solution against the gold solution.
+    
+    Args:
+        evaluator: Evaluator instance
+        generated_solution: The generated solution string
+        sample: Sample dictionary containing gold solution
+        evaluator_type: Type of evaluator ("test", "math", "poem")
+    
+    Returns:
+        Reward score (float)
+    """
+    if evaluator_type == "math":
+        # For math evaluator, use accuracy_reward directly
+        solution = sample.get("solution", None)
+        if solution is None:
+            return 0.0
+        
+        # Format for accuracy_reward: expects [[{"content": "..."}], ...]
+        formatted_completions = [[{"content": generated_solution}]]
+        
+        # accuracy_reward expects solution as a list
+        if isinstance(solution, str):
+            solution_list = [solution]
+        elif isinstance(solution, list):
+            solution_list = solution
+        else:
+            solution_list = [str(solution)]
+        
+        rewards = accuracy_reward(formatted_completions, solution_list)
+        return float(rewards[0]) if rewards else 0.0
+    elif evaluator_type == "poem":
+        # For poem evaluator, use the evaluate method directly
+        return evaluator.evaluate(generated_solution, **{k: v for k, v in sample.items() if k != "prompt"})
+    elif evaluator_type == "test":
+        # For test evaluator, use the evaluate method directly
+        return evaluator.evaluate(generated_solution, **{k: v for k, v in sample.items() if k != "prompt"})
+    else:
+        # Default: return 0.0
+        return 0.0
 
 
 def _generate_with_inference_model(
