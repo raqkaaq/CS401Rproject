@@ -234,8 +234,8 @@ def run_evaluation(
     dataset_name: Optional[str] = None,
     rewriter_client_type: str = "auto",
     inference_client_type: str = "auto",
-    rewriter_max_tokens: int = 512,
-    inference_max_tokens: int = 256,
+    rewriter_max_tokens: int = 1024,
+    inference_max_tokens: int = 1024,
     compare_baseline: bool = True,
     output_file: Optional[str] = None,
 ) -> Dict[str, Any]:

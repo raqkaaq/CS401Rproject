@@ -73,6 +73,6 @@ class PoemEvaluator(BaseEvaluator):
         # else:
         #     length_score = max(0.0, 1 - (L - target) / target)
 
-        final_score = 0.7 * rhyme_score
+        final_score = 1.0 * rhyme_score
 
         return float(final_score)
