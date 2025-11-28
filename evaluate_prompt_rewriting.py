@@ -61,20 +61,24 @@ def load_rewriter_model(model_path: str) -> HFClient:
     Load the prompt rewriting model using HuggingFace format.
     
     Args:
-        model_path: Directory path or HF model identifier for the model
+        model_path: Directory path (absolute or relative) or HF model identifier for the model
     
     Returns:
         HFClient instance with the model loaded
     """
     print(f"Loading rewriter model from: {model_path}")
     
-    # Check if it's a directory path
+    # Check if it's a local directory path (absolute or relative)
+    # Resolve relative paths to absolute for easier handling
     if os.path.exists(model_path) and os.path.isdir(model_path):
+        model_path = os.path.abspath(model_path)  # Convert to absolute path
         if not os.path.exists(os.path.join(model_path, "config.json")):
             raise FileNotFoundError(f"Model directory exists but config.json not found: {model_path}")
-        print(f"  Using local model directory")
+        print(f"  Using local model directory: {model_path}")
+        is_local_dir = True
     else:
-        print(f"  Will download from HuggingFace: {model_path}")
+        print(f"  Will use HuggingFace model identifier: {model_path}")
+        is_local_dir = False
     
     # Always use HFClient
     torch_dtype = "bf16" if torch.cuda.is_available() else None
@@ -83,7 +87,57 @@ def load_rewriter_model(model_path: str) -> HFClient:
     client = HFClient(torch_dtype=torch_dtype)
     
     # Load the model
-    client.warmup_model(model_path)
+    # For local directories, load directly. For HF model IDs, use warmup_model logic
+    if is_local_dir:
+        # Load directly from the local directory path
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        
+        client.tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
+        if client.tokenizer.pad_token is None:
+            client.tokenizer.pad_token = client.tokenizer.eos_token
+        client.tokenizer.padding_side = 'left'
+        
+        # Build model kwargs
+        model_kwargs = {}
+        if isinstance(torch_dtype, str):
+            dtype_map = {
+                "fp16": torch.float16,
+                "bf16": torch.bfloat16,
+                "fp32": torch.float32,
+            }
+            model_kwargs["torch_dtype"] = dtype_map.get(torch_dtype.lower(), None)
+        
+        # Load model
+        try:
+            load_kwargs = {k: v for k, v in model_kwargs.items() if v is not None}
+            if load_kwargs:
+                client.model = AutoModelForCausalLM.from_pretrained(model_path, **load_kwargs)
+            else:
+                client.model = AutoModelForCausalLM.from_pretrained(model_path)
+        except Exception as e:
+            print(f"Model load with kwargs {model_kwargs} failed: {e}. Falling back to default load.")
+            client.model = AutoModelForCausalLM.from_pretrained(model_path)
+        
+        # Move to device
+        if torch.cuda.is_available():
+            try:
+                client.model.to(client.device)
+                print(f"  Model moved to {client.device}")
+            except Exception as e:
+                print(f"Warning: Failed to move model to {client.device}: {e}")
+        
+        client.model.eval()
+        
+        # Verify model is on correct device
+        try:
+            first_param = next(client.model.parameters())
+            print(f"  Model loaded on device: {first_param.device}")
+        except StopIteration:
+            pass
+    else:
+        # Use the existing warmup_model logic for HF model IDs
+        client.warmup_model(model_path)
+    
     client.model_id = model_path  # Store the model path/identifier
     
     print("✓ Rewriter model loaded successfully")
