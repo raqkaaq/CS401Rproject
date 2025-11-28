@@ -16,7 +16,8 @@ Example usage:
     # Evaluate a fine-tuned model on math problems
     python evaluate_prompt_rewriting.py \\
         --rewriter-model-dir ./trainer_output/checkpoint-450 \\
-        --inference-model qwen2.5:0.5b-instruct \\
+        --base-rewriter-model Qwen/Qwen2.5-0.5B-Instruct \\
+        --inference-model Qwen/Qwen2.5-0.5B-Instruct \\
         --parser-type math \\
         --evaluator-type math \\
         --num-test-samples 100 \\
@@ -25,11 +26,11 @@ Example usage:
     # Evaluate on poem dataset
     python evaluate_prompt_rewriting.py \\
         --rewriter-model-dir ./trainer_output/checkpoint-450 \\
+        --base-rewriter-model Qwen/Qwen2.5-0.5B-Instruct \\
         --inference-model Qwen/Qwen2.5-0.5B-Instruct \\
         --parser-type poem \\
         --evaluator-type poem \\
         --num-test-samples 50 \\
-        --inference-client-type hf \\
         --output-file poem_results.json
 """
 
@@ -46,7 +47,7 @@ import torch
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from src.inference import HFClient, OllamaClient
+from src.inference import HFClient
 from src.parsers.test_parser import TestParser
 from src.parsers.math_parser import MathParser
 from src.parsers.poem_parser import PoemParser
@@ -55,118 +56,76 @@ from src.evaluators.math_evaluator import MathEvaluator
 from src.evaluators.poem_evaluator import PoemEvaluator
 
 
-def load_rewriter_model(model_dir: str, client_type: str = "auto") -> Any:
+def load_rewriter_model(model_path: str) -> HFClient:
     """
-    Load the fine-tuned prompt rewriting model.
+    Load the prompt rewriting model using HuggingFace format.
     
     Args:
-        model_dir: Directory containing the fine-tuned model
-        client_type: Client type preference ("auto", "ollama", or "hf")
+        model_path: Directory path or HF model identifier for the model
     
     Returns:
-        Client instance with the model loaded
+        HFClient instance with the model loaded
     """
-    print(f"Loading rewriter model from: {model_dir}")
+    print(f"Loading rewriter model from: {model_path}")
     
-    # Check if model directory exists
-    if not os.path.exists(model_dir):
-        raise FileNotFoundError(f"Model directory not found: {model_dir}")
+    # Check if it's a directory path
+    if os.path.exists(model_path) and os.path.isdir(model_path):
+        if not os.path.exists(os.path.join(model_path, "config.json")):
+            raise FileNotFoundError(f"Model directory exists but config.json not found: {model_path}")
+        print(f"  Using local model directory")
+    else:
+        print(f"  Will download from HuggingFace: {model_path}")
     
-    # Determine client type
-    if client_type == "hf":
-        print("Using HFClient for rewriter model")
-        torch_dtype = "bf16" if torch.cuda.is_available() else None
-        if torch_dtype:
-            print(f"  Using {torch_dtype} precision for GPU inference")
-        client = HFClient(torch_dtype=torch_dtype)
-    elif client_type == "ollama":
-        print("Using OllamaClient for rewriter model")
-        client = OllamaClient()
-        if not client.is_healthy():
-            raise RuntimeError("Ollama is not available but 'ollama' was specified")
-    else:  # auto
-        print("Auto-detecting client for rewriter model...")
-        ollama_client = OllamaClient()
-        if ollama_client.is_healthy():
-            print("Ollama is available, using OllamaClient")
-            client = ollama_client
-        else:
-            print("Ollama is not available, using HFClient")
-            torch_dtype = "bf16" if torch.cuda.is_available() else None
-            if torch_dtype:
-                print(f"  Using {torch_dtype} precision for GPU inference")
-            client = HFClient(torch_dtype=torch_dtype)
+    # Always use HFClient
+    torch_dtype = "bf16" if torch.cuda.is_available() else None
+    if torch_dtype:
+        print(f"  Using {torch_dtype} precision for GPU inference")
+    client = HFClient(torch_dtype=torch_dtype)
     
     # Load the model
-    # For HF models, use the model directory path
-    # For Ollama, we'd need to convert/load the model differently
-    if isinstance(client, HFClient):
-        # Use the model directory directly
-        client.warmup_model(model_dir)
-        client.model_id = model_dir  # Store the model path
-    else:
-        # For Ollama, we need the model name, not the directory
-        # This assumes the model has been imported to Ollama
-        model_name = os.path.basename(model_dir.rstrip("/"))
-        client.warmup_model(model_name)
-        client.model_id = model_name
+    client.warmup_model(model_path)
+    client.model_id = model_path  # Store the model path/identifier
     
     print("✓ Rewriter model loaded successfully")
     return client
 
 
-def load_inference_model(model: str, client_type: str = "auto") -> Any:
+def load_inference_model(model: str) -> HFClient:
     """
     Load the inference model for attempting the rewritten prompts.
     
     Args:
-        model: Model identifier (HF format or Ollama format)
-        client_type: Client type preference ("auto", "ollama", or "hf")
+        model: HuggingFace model identifier or local directory path
     
     Returns:
-        Client instance with the model loaded
+        HFClient instance with the model loaded
     """
     print(f"Loading inference model: {model}")
     
-    if client_type == "hf":
-        print("Using HFClient for inference model")
-        torch_dtype = "bf16" if torch.cuda.is_available() else None
-        if torch_dtype:
-            print(f"  Using {torch_dtype} precision for GPU inference")
-        client = HFClient(torch_dtype=torch_dtype)
-        client.warmup_model(model)
-    elif client_type == "ollama":
-        print("Using OllamaClient for inference model")
-        client = OllamaClient()
-        if not client.is_healthy():
-            raise RuntimeError("Ollama is not available but 'ollama' was specified")
-        client.warmup_model(model)
-    else:  # auto
-        print("Auto-detecting client for inference model...")
-        ollama_client = OllamaClient()
-        if ollama_client.is_healthy():
-            print("Ollama is available, using OllamaClient")
-            client = ollama_client
-            client.warmup_model(model)
-        else:
-            print("Ollama is not available, using HFClient")
-            torch_dtype = "bf16" if torch.cuda.is_available() else None
-            if torch_dtype:
-                print(f"  Using {torch_dtype} precision for GPU inference")
-            client = HFClient(torch_dtype=torch_dtype)
-            client.warmup_model(model)
+    # Check if it's a local directory
+    if os.path.exists(model) and os.path.isdir(model):
+        print(f"  Using local model directory")
+    else:
+        print(f"  Will download from HuggingFace if needed")
+    
+    # Always use HFClient
+    torch_dtype = "bf16" if torch.cuda.is_available() else None
+    if torch_dtype:
+        print(f"  Using {torch_dtype} precision for GPU inference")
+    client = HFClient(torch_dtype=torch_dtype)
+    client.warmup_model(model)
     
     print("✓ Inference model loaded successfully")
     return client
 
 
-def generate_rewritten_prompt(rewriter_client: Any, prompt_messages: List[Dict[str, str]], 
+def generate_rewritten_prompt(rewriter_client: HFClient, prompt_messages: List[Dict[str, str]], 
                               max_tokens: int = 512) -> str:
     """
-    Use the fine-tuned model to rewrite a prompt.
+    Use the model to rewrite a prompt.
     
     Args:
-        rewriter_client: Client instance with the rewriter model loaded
+        rewriter_client: HFClient instance with the rewriter model loaded
         prompt_messages: List of message dicts with 'role' and 'content' keys
         max_tokens: Maximum tokens for rewriting
     
@@ -190,71 +149,61 @@ def generate_rewritten_prompt(rewriter_client: Any, prompt_messages: List[Dict[s
     else:
         rewriter_input = user_msg
     
-    # Generate rewritten prompt
-    if isinstance(rewriter_client, HFClient):
-        # Use batch generation with single prompt to get proper token extraction
-        # This ensures we only get the newly generated tokens
-        tokenizer = rewriter_client.tokenizer
-        toks = tokenizer(rewriter_input, return_tensors="pt", padding=True, truncation=True)
-        toks = {k: v.to(rewriter_client.device) for k, v in toks.items()}
-        input_len = (toks.get("attention_mask") == 1).sum().item()
-        
-        # Generate using the model directly
-        with torch.inference_mode():
-            outputs = rewriter_client.model.generate(
-                input_ids=toks.get("input_ids"),
-                attention_mask=toks.get("attention_mask"),
-                max_new_tokens=max_tokens,
-                do_sample=False,
-                use_cache=True,
-            )
-        
-        # Extract only the newly generated tokens (after input length)
-        generated_tokens = outputs[0][input_len:]
-        rewritten = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-        
-        return rewritten
-    else:  # OllamaClient
-        rewritten = rewriter_client.generate(
-            model=rewriter_client.model_id,
-            prompt=rewriter_input,
-            temperature=0.0,
-            max_tokens=max_tokens
+    # Generate rewritten prompt using HFClient
+    tokenizer = rewriter_client.tokenizer
+    toks = tokenizer(rewriter_input, return_tensors="pt", padding=True, truncation=True)
+    toks = {k: v.to(rewriter_client.device) for k, v in toks.items()}
+    input_len = (toks.get("attention_mask") == 1).sum().item()
+    
+    # Generate using the model directly
+    with torch.inference_mode():
+        outputs = rewriter_client.model.generate(
+            input_ids=toks.get("input_ids"),
+            attention_mask=toks.get("attention_mask"),
+            max_new_tokens=max_tokens,
+            do_sample=False,
+            use_cache=True,
         )
-        return rewritten
+    
+    # Extract only the newly generated tokens (after input length)
+    generated_tokens = outputs[0][input_len:]
+    rewritten = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    
+    return rewritten
 
 
 def run_evaluation(
     rewriter_model_dir: str,
+    base_rewriter_model: str,
     inference_model: str,
     parser_type: str,
     evaluator_type: str,
     num_test_samples: Optional[int] = None,
     meta_prompt: str = "",
     dataset_name: Optional[str] = None,
-    rewriter_client_type: str = "auto",
-    inference_client_type: str = "auto",
     rewriter_max_tokens: int = 1024,
     inference_max_tokens: int = 1024,
-    compare_baseline: bool = True,
     output_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Run the full evaluation pipeline.
+    Run the full evaluation pipeline comparing fine-tuned vs base rewriter models.
+    
+    Flow:
+    1. Fine-tuned Rewriter LLM -> rewritten prompt -> Inference LLM -> output -> reward
+    2. Base Rewriter LLM -> rewritten prompt -> Inference LLM -> output -> reward
+    3. Compare rewards to see if fine-tuning improved rewriting
     
     Args:
         rewriter_model_dir: Directory containing the fine-tuned rewriter model
-        inference_model: Model identifier for inference (base LLM)
+        base_rewriter_model: Model identifier for base (pre-finetuned) rewriter model
+        inference_model: Model identifier for inference (base LLM that solves the task)
         parser_type: Type of parser ("test", "math", "poem")
         evaluator_type: Type of evaluator ("test", "math", "poem")
         num_test_samples: Number of test samples to evaluate (None = all)
         meta_prompt: Meta prompt to use for parsing
         dataset_name: Dataset name for parser (optional)
-        rewriter_client_type: Client type for rewriter ("auto", "ollama", "hf")
-        inference_client_type: Client type for inference ("auto", "ollama", "hf")
         rewriter_max_tokens: Max tokens for prompt rewriting
         inference_max_tokens: Max tokens for inference
-        compare_baseline: Whether to compare with baseline (original prompt)
         output_file: Optional file path to save results (JSON)
     
     Returns:
@@ -262,6 +211,8 @@ def run_evaluation(
     """
     print("=" * 80)
     print("Starting Prompt Rewriting Evaluation")
+    print("=" * 80)
+    print("Comparing Fine-tuned vs Base Rewriter Models")
     print("=" * 80)
     
     # Load test data using parser
@@ -295,23 +246,27 @@ def run_evaluation(
     
     print(f"✓ Loaded {len(test_data)} test samples")
     
-    # Load rewriter model
-    print(f"\n2. Loading rewriter model from: {rewriter_model_dir}")
-    rewriter_client = load_rewriter_model(rewriter_model_dir, rewriter_client_type)
+    # Load fine-tuned rewriter model
+    print(f"\n2. Loading fine-tuned rewriter model from: {rewriter_model_dir}")
+    finetuned_rewriter_client = load_rewriter_model(rewriter_model_dir)
+    
+    # Load base rewriter model
+    print(f"\n3. Loading base rewriter model: {base_rewriter_model}")
+    base_rewriter_client = load_rewriter_model(base_rewriter_model)
     
     # Load inference model
-    print(f"\n3. Loading inference model: {inference_model}")
-    inference_client = load_inference_model(inference_model, inference_client_type)
+    print(f"\n4. Loading inference model: {inference_model}")
+    inference_client = load_inference_model(inference_model)
     
     # Create evaluator
-    print(f"\n4. Creating {evaluator_type} evaluator...")
+    print(f"\n5. Creating {evaluator_type} evaluator...")
     if evaluator_type == "test":
-        evaluator = TestEvaluator(
+            evaluator = TestEvaluator(
             model=inference_model,
             client=inference_client,
             temperature=0.0,
             max_tokens=inference_max_tokens,
-            prefer_client=inference_client_type
+            prefer_client="hf"
         )
     elif evaluator_type == "math":
         evaluator = MathEvaluator(
@@ -319,7 +274,7 @@ def run_evaluation(
             client=inference_client,
             temperature=0.0,
             max_tokens=inference_max_tokens,
-            prefer_client=inference_client_type
+            prefer_client="hf"
         )
     elif evaluator_type == "poem":
         evaluator = PoemEvaluator(
@@ -327,7 +282,7 @@ def run_evaluation(
             client=inference_client,
             temperature=0.0,
             max_tokens=inference_max_tokens,
-            prefer_client=inference_client_type
+            prefer_client="hf"
         )
     else:
         raise ValueError(f"Unknown evaluator type: {evaluator_type}")
@@ -335,7 +290,8 @@ def run_evaluation(
     print("✓ Evaluator created")
     
     # Run evaluation on each test sample
-    print(f"\n5. Running evaluation on {len(test_data)} samples...")
+    print(f"\n6. Running evaluation on {len(test_data)} samples...")
+    print("   Flow: Rewriter -> Rewritten Prompt -> Inference Model -> Output -> Reward")
     results = []
     
     for i, sample in enumerate(tqdm(test_data, desc="Evaluating")):
@@ -345,7 +301,7 @@ def run_evaluation(
             print(f"Warning: Sample {i} has no prompt, skipping")
             continue
         
-        # Get original user prompt (for baseline comparison)
+        # Get original user prompt
         original_user_prompt = None
         for msg in prompt_messages:
             if msg.get("role") == "user":
@@ -356,122 +312,76 @@ def run_evaluation(
             print(f"Warning: Sample {i} has no user prompt, skipping")
             continue
         
+        # ===== FINE-TUNED REWRITER PATH =====
         # Generate rewritten prompt using fine-tuned model
         try:
-            rewritten_prompt = generate_rewritten_prompt(
-                rewriter_client,
+            rewritten_prompt_finetuned = generate_rewritten_prompt(
+                finetuned_rewriter_client,
                 prompt_messages,
                 max_tokens=rewriter_max_tokens
             )
         except Exception as e:
-            print(f"Error rewriting prompt for sample {i}: {e}")
-            rewritten_prompt = ""
+            print(f"Error rewriting prompt with fine-tuned model for sample {i}: {e}")
+            rewritten_prompt_finetuned = ""
         
-        # Attempt task with rewritten prompt
-        # Note: For instruction-tuned models, the output typically contains only
-        # the generated continuation (answer), not the input prompt
+        # Attempt task with rewritten prompt (fine-tuned)
         try:
-            if isinstance(inference_client, HFClient):
-                # Extract only newly generated tokens for consistency
-                tokenizer = inference_client.tokenizer
-                toks = tokenizer(rewritten_prompt, return_tensors="pt", padding=True, truncation=True)
-                toks = {k: v.to(inference_client.device) for k, v in toks.items()}
-                input_len = (toks.get("attention_mask") == 1).sum().item()
-                
-                with torch.inference_mode():
-                    outputs = inference_client.model.generate(
-                        input_ids=toks.get("input_ids"),
-                        attention_mask=toks.get("attention_mask"),
-                        max_new_tokens=inference_max_tokens,
-                        do_sample=False,
-                        use_cache=True,
-                    )
-                
-                # Extract only the newly generated tokens
-                generated_tokens = outputs[0][input_len:]
-                eval_rewritten = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-            else:  # OllamaClient
-                eval_rewritten = inference_client.generate(
-                    model=inference_model,
-                    prompt=rewritten_prompt,
-                    temperature=0.0,
-                    max_tokens=inference_max_tokens
-                )
+            eval_output_finetuned = _generate_with_inference_model(
+                inference_client, inference_model, rewritten_prompt_finetuned, inference_max_tokens
+            )
         except Exception as e:
-            print(f"Error generating with rewritten prompt for sample {i}: {e}")
-            eval_rewritten = ""
+            print(f"Error generating with fine-tuned rewritten prompt for sample {i}: {e}")
+            eval_output_finetuned = ""
         
-        # Evaluate rewritten output
+        # Evaluate fine-tuned output
         try:
-            # Prepare kwargs for evaluator (include any additional fields from sample)
             eval_kwargs = {k: v for k, v in sample.items() if k != "prompt"}
-            
-            # Call evaluator's reward function
-            reward_rewritten = evaluator.reward_function(
-                [eval_rewritten],
-                **eval_kwargs
-            )[0]
+            reward_finetuned = evaluator.reward_function([eval_output_finetuned], **eval_kwargs)[0]
         except Exception as e:
-            print(f"Error evaluating rewritten output for sample {i}: {e}")
-            reward_rewritten = 0.0
+            print(f"Error evaluating fine-tuned output for sample {i}: {e}")
+            reward_finetuned = 0.0
         
-        # Baseline comparison (original prompt without rewriting)
-        reward_baseline = None
-        eval_baseline = None
+        # ===== BASE REWRITER PATH =====
+        # Generate rewritten prompt using base model
+        try:
+            rewritten_prompt_base = generate_rewritten_prompt(
+                base_rewriter_client,
+                prompt_messages,
+                max_tokens=rewriter_max_tokens
+            )
+        except Exception as e:
+            print(f"Error rewriting prompt with base model for sample {i}: {e}")
+            rewritten_prompt_base = ""
         
-        if compare_baseline:
-            try:
-                if isinstance(inference_client, HFClient):
-                    # Extract only newly generated tokens for consistency
-                    tokenizer = inference_client.tokenizer
-                    toks = tokenizer(original_user_prompt, return_tensors="pt", padding=True, truncation=True)
-                    toks = {k: v.to(inference_client.device) for k, v in toks.items()}
-                    input_len = (toks.get("attention_mask") == 1).sum().item()
-                    
-                    with torch.inference_mode():
-                        outputs = inference_client.model.generate(
-                            input_ids=toks.get("input_ids"),
-                            attention_mask=toks.get("attention_mask"),
-                            max_new_tokens=inference_max_tokens,
-                            do_sample=False,
-                            use_cache=True,
-                        )
-                    
-                    # Extract only the newly generated tokens
-                    generated_tokens = outputs[0][input_len:]
-                    eval_baseline = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-                else:  # OllamaClient
-                    eval_baseline = inference_client.generate(
-                        model=inference_model,
-                        prompt=original_user_prompt,
-                        temperature=0.0,
-                        max_tokens=inference_max_tokens
-                    )
-                
-                eval_kwargs = {k: v for k, v in sample.items() if k != "prompt"}
-                reward_baseline = evaluator.reward_function(
-                    [eval_baseline],
-                    **eval_kwargs
-                )[0]
-            except Exception as e:
-                print(f"Error evaluating baseline for sample {i}: {e}")
-                reward_baseline = 0.0
+        # Attempt task with rewritten prompt (base)
+        try:
+            eval_output_base = _generate_with_inference_model(
+                inference_client, inference_model, rewritten_prompt_base, inference_max_tokens
+            )
+        except Exception as e:
+            print(f"Error generating with base rewritten prompt for sample {i}: {e}")
+            eval_output_base = ""
+        
+        # Evaluate base output
+        try:
+            eval_kwargs = {k: v for k, v in sample.items() if k != "prompt"}
+            reward_base = evaluator.reward_function([eval_output_base], **eval_kwargs)[0]
+        except Exception as e:
+            print(f"Error evaluating base output for sample {i}: {e}")
+            reward_base = 0.0
         
         # Store results
         result = {
             "sample_index": i,
             "original_prompt": original_user_prompt,
-            "rewritten_prompt": rewritten_prompt,
-            "eval_rewritten": eval_rewritten,
-            "reward_rewritten": reward_rewritten,
+            "rewritten_prompt_finetuned": rewritten_prompt_finetuned,
+            "rewritten_prompt_base": rewritten_prompt_base,
+            "eval_output_finetuned": eval_output_finetuned,
+            "eval_output_base": eval_output_base,
+            "reward_finetuned": reward_finetuned,
+            "reward_base": reward_base,
+            "improvement": reward_finetuned - reward_base,
         }
-        
-        if compare_baseline:
-            result.update({
-                "eval_baseline": eval_baseline,
-                "reward_baseline": reward_baseline,
-                "improvement": reward_rewritten - reward_baseline if reward_baseline is not None else None
-            })
         
         # Include any additional fields from the sample
         for key, value in sample.items():
@@ -481,53 +391,54 @@ def run_evaluation(
         results.append(result)
     
     # Calculate statistics
-    print(f"\n6. Calculating statistics...")
-    rewards_rewritten = [r["reward_rewritten"] for r in results]
+    print(f"\n7. Calculating statistics...")
+    rewards_finetuned = [r["reward_finetuned"] for r in results]
+    rewards_base = [r["reward_base"] for r in results]
+    improvements = [r["improvement"] for r in results]
     
     stats = {
         "num_samples": len(results),
-        "mean_reward_rewritten": sum(rewards_rewritten) / len(rewards_rewritten) if rewards_rewritten else 0.0,
-        "max_reward_rewritten": max(rewards_rewritten) if rewards_rewritten else 0.0,
-        "min_reward_rewritten": min(rewards_rewritten) if rewards_rewritten else 0.0,
+        "mean_reward_finetuned": sum(rewards_finetuned) / len(rewards_finetuned) if rewards_finetuned else 0.0,
+        "mean_reward_base": sum(rewards_base) / len(rewards_base) if rewards_base else 0.0,
+        "mean_improvement": sum(improvements) / len(improvements) if improvements else 0.0,
+        "max_reward_finetuned": max(rewards_finetuned) if rewards_finetuned else 0.0,
+        "max_reward_base": max(rewards_base) if rewards_base else 0.0,
+        "min_reward_finetuned": min(rewards_finetuned) if rewards_finetuned else 0.0,
+        "min_reward_base": min(rewards_base) if rewards_base else 0.0,
+        "num_improved": sum(1 for imp in improvements if imp > 0),
+        "num_worse": sum(1 for imp in improvements if imp < 0),
+        "num_same": sum(1 for imp in improvements if imp == 0),
     }
-    
-    if compare_baseline:
-        rewards_baseline = [r.get("reward_baseline", 0.0) for r in results if r.get("reward_baseline") is not None]
-        improvements = [r.get("improvement", 0.0) for r in results if r.get("improvement") is not None]
-        
-        stats.update({
-            "mean_reward_baseline": sum(rewards_baseline) / len(rewards_baseline) if rewards_baseline else 0.0,
-            "mean_improvement": sum(improvements) / len(improvements) if improvements else 0.0,
-            "num_improved": sum(1 for imp in improvements if imp > 0),
-            "num_worse": sum(1 for imp in improvements if imp < 0),
-            "num_same": sum(1 for imp in improvements if imp == 0),
-        })
     
     # Print summary
     print("\n" + "=" * 80)
     print("Evaluation Summary")
     print("=" * 80)
     print(f"Total samples evaluated: {stats['num_samples']}")
-    print(f"Mean reward (rewritten): {stats['mean_reward_rewritten']:.4f}")
-    
-    if compare_baseline:
-        print(f"Mean reward (baseline): {stats['mean_reward_baseline']:.4f}")
-        print(f"Mean improvement: {stats['mean_improvement']:.4f}")
-        print(f"Samples improved: {stats['num_improved']}")
-        print(f"Samples worse: {stats['num_worse']}")
-        print(f"Samples same: {stats['num_same']}")
-    
+    print(f"\nFine-tuned Rewriter:")
+    print(f"  Mean reward: {stats['mean_reward_finetuned']:.4f}")
+    print(f"  Max reward:  {stats['max_reward_finetuned']:.4f}")
+    print(f"  Min reward:  {stats['min_reward_finetuned']:.4f}")
+    print(f"\nBase Rewriter:")
+    print(f"  Mean reward: {stats['mean_reward_base']:.4f}")
+    print(f"  Max reward:  {stats['max_reward_base']:.4f}")
+    print(f"  Min reward:  {stats['min_reward_base']:.4f}")
+    print(f"\nComparison:")
+    print(f"  Mean improvement: {stats['mean_improvement']:.4f}")
+    print(f"  Samples improved: {stats['num_improved']} ({100*stats['num_improved']/stats['num_samples']:.1f}%)")
+    print(f"  Samples worse:    {stats['num_worse']} ({100*stats['num_worse']/stats['num_samples']:.1f}%)")
+    print(f"  Samples same:     {stats['num_same']} ({100*stats['num_same']/stats['num_samples']:.1f}%)")
     print("=" * 80)
     
     # Prepare final results
     final_results = {
         "config": {
             "rewriter_model_dir": rewriter_model_dir,
+            "base_rewriter_model": base_rewriter_model,
             "inference_model": inference_model,
             "parser_type": parser_type,
             "evaluator_type": evaluator_type,
             "num_test_samples": num_test_samples,
-            "compare_baseline": compare_baseline,
         },
         "statistics": stats,
         "results": results,
@@ -535,12 +446,50 @@ def run_evaluation(
     
     # Save results if output file specified
     if output_file:
-        print(f"\n7. Saving results to: {output_file}")
+        print(f"\n8. Saving results to: {output_file}")
         with open(output_file, 'w') as f:
             json.dump(final_results, f, indent=2)
         print("✓ Results saved")
     
     return final_results
+
+
+def _generate_with_inference_model(
+    inference_client: HFClient,
+    inference_model: str,
+    prompt: str,
+    max_tokens: int
+) -> str:
+    """
+    Helper function to generate output using inference model.
+    
+    Args:
+        inference_client: HFClient instance with inference model loaded
+        inference_model: Model identifier
+        prompt: Prompt to generate from
+        max_tokens: Maximum tokens to generate
+    
+    Returns:
+        Generated output string (only newly generated tokens)
+    """
+    # Extract only newly generated tokens
+    tokenizer = inference_client.tokenizer
+    toks = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
+    toks = {k: v.to(inference_client.device) for k, v in toks.items()}
+    input_len = (toks.get("attention_mask") == 1).sum().item()
+    
+    with torch.inference_mode():
+        outputs = inference_client.model.generate(
+            input_ids=toks.get("input_ids"),
+            attention_mask=toks.get("attention_mask"),
+            max_new_tokens=max_tokens,
+            do_sample=False,
+            use_cache=True,
+        )
+    
+    # Extract only the newly generated tokens
+    generated_tokens = outputs[0][input_len:]
+    return tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
 
 def main():
@@ -558,11 +507,18 @@ def main():
         help="Directory containing the fine-tuned prompt rewriting model"
     )
     parser.add_argument(
+        "--base-rewriter-model",
+        type=str,
+        required=True,
+        help="Model identifier for base (pre-finetuned) rewriter model. "
+             "HF format: 'Qwen/Qwen2.5-0.5B-Instruct' or local directory path"
+    )
+    parser.add_argument(
         "--inference-model",
         type=str,
         required=True,
         help="Model identifier for inference (base LLM that attempts the task). "
-             "HF format: 'Qwen/Qwen2.5-0.5B-Instruct', Ollama format: 'qwen2.5:0.5b-instruct'"
+             "HF format: 'Qwen/Qwen2.5-0.5B-Instruct' or local directory path"
     )
     
     # Parser arguments
@@ -602,21 +558,6 @@ def main():
     )
     
     # Client type arguments
-    parser.add_argument(
-        "--rewriter-client-type",
-        type=str,
-        default="auto",
-        choices=["auto", "ollama", "hf"],
-        help="Client type for rewriter model"
-    )
-    parser.add_argument(
-        "--inference-client-type",
-        type=str,
-        default="auto",
-        choices=["auto", "ollama", "hf"],
-        help="Client type for inference model"
-    )
-    
     # Generation arguments
     parser.add_argument(
         "--rewriter-max-tokens",
@@ -632,11 +573,6 @@ def main():
     )
     
     # Evaluation options
-    parser.add_argument(
-        "--no-baseline",
-        action="store_true",
-        help="Don't compare with baseline (original prompt)"
-    )
     parser.add_argument(
         "--output-file",
         type=str,
@@ -658,17 +594,15 @@ def main():
     # Run evaluation
     results = run_evaluation(
         rewriter_model_dir=args.rewriter_model_dir,
+        base_rewriter_model=args.base_rewriter_model,
         inference_model=args.inference_model,
         parser_type=args.parser_type,
         evaluator_type=args.evaluator_type,
         num_test_samples=args.num_test_samples,
         meta_prompt=args.meta_prompt,
         dataset_name=args.dataset_name,
-        rewriter_client_type=args.rewriter_client_type,
-        inference_client_type=args.inference_client_type,
         rewriter_max_tokens=args.rewriter_max_tokens,
         inference_max_tokens=args.inference_max_tokens,
-        compare_baseline=not args.no_baseline,
         output_file=args.output_file,
     )
     
