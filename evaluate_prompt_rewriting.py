@@ -253,14 +253,15 @@ def load_inference_model(model: str) -> HFClient:
 
 
 def generate_rewritten_prompt(rewriter_client: HFClient, prompt_messages: List[Dict[str, str]], 
-                              max_tokens: int = 512) -> str:
+                              max_tokens: int = 5012, max_retries: int = 3) -> str:
     """
-    Use the model to rewrite a prompt.
+    Use the model to rewrite a prompt with retry logic if output is empty.
     
     Args:
         rewriter_client: HFClient instance with the rewriter model loaded
         prompt_messages: List of message dicts with 'role' and 'content' keys
         max_tokens: Maximum tokens for rewriting
+        max_retries: Maximum number of retries if output is empty
     
     Returns:
         Rewritten prompt string (only the newly generated part)
@@ -282,27 +283,38 @@ def generate_rewritten_prompt(rewriter_client: HFClient, prompt_messages: List[D
     else:
         rewriter_input = user_msg
     
-    # Generate rewritten prompt using HFClient
+    # Generate rewritten prompt using HFClient with retry logic
     tokenizer = rewriter_client.tokenizer
     toks = tokenizer(rewriter_input, return_tensors="pt", padding=True, truncation=True)
     toks = {k: v.to(rewriter_client.device) for k, v in toks.items()}
     input_len = (toks.get("attention_mask") == 1).sum().item()
     
-    # Generate using the model directly
-    with torch.inference_mode():
-        outputs = rewriter_client.model.generate(
-            input_ids=toks.get("input_ids"),
-            attention_mask=toks.get("attention_mask"),
-            max_new_tokens=max_tokens,
-            do_sample=False,
-            use_cache=True,
-        )
+    # Retry up to max_retries times if output is empty
+    for attempt in range(max_retries):
+        # Generate using the model directly
+        with torch.inference_mode():
+            outputs = rewriter_client.model.generate(
+                input_ids=toks.get("input_ids"),
+                attention_mask=toks.get("attention_mask"),
+                max_new_tokens=max_tokens,
+                do_sample=False,
+                use_cache=True,
+            )
+        
+        # Extract only the newly generated tokens (after input length)
+        generated_tokens = outputs[0][input_len:]
+        rewritten = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        
+        # If we got a non-empty result, return it
+        if rewritten and rewritten.strip():
+            return rewritten
+        
+        # If this isn't the last attempt, continue to retry
+        if attempt < max_retries - 1:
+            continue
     
-    # Extract only the newly generated tokens (after input length)
-    generated_tokens = outputs[0][input_len:]
-    rewritten = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-    
-    return rewritten
+    # If all retries failed, return empty string
+    return ""
 
 
 def _evaluate_solution(
@@ -384,8 +396,8 @@ def run_evaluation(
     num_test_samples: Optional[int] = None,
     meta_prompt: str = "",
     dataset_name: Optional[str] = None,
-    rewriter_max_tokens: int = 1024,
-    inference_max_tokens: int = 5024,
+    rewriter_max_tokens: int = 5012,
+    inference_max_tokens: int = 5012,
     output_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
@@ -551,13 +563,19 @@ def run_evaluation(
             rewritten_prompt_finetuned = ""
         
         # Attempt task with rewritten prompt (fine-tuned)
-        try:
-            eval_output_finetuned = _generate_with_inference_model(
-                inference_client, inference_model, rewritten_prompt_finetuned, inference_max_tokens
-            )
-        except Exception as e:
-            print(f"Error generating with fine-tuned rewritten prompt for sample {i}: {e}")
+        # Skip if rewritten prompt is empty
+        if not rewritten_prompt_finetuned or not rewritten_prompt_finetuned.strip():
             eval_output_finetuned = ""
+        else:
+            try:
+                eval_output_finetuned = _generate_with_inference_model(
+                    inference_client, inference_model, rewritten_prompt_finetuned, inference_max_tokens
+                )
+            except Exception as e:
+                print(f"Error generating with fine-tuned rewritten prompt for sample {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                eval_output_finetuned = ""
         
         # Evaluate fine-tuned output
         try:
@@ -590,13 +608,19 @@ def run_evaluation(
             rewritten_prompt_base = ""
         
         # Attempt task with rewritten prompt (base)
-        try:
-            eval_output_base = _generate_with_inference_model(
-                inference_client, inference_model, rewritten_prompt_base, inference_max_tokens
-            )
-        except Exception as e:
-            print(f"Error generating with base rewritten prompt for sample {i}: {e}")
+        # Skip if rewritten prompt is empty
+        if not rewritten_prompt_base or not rewritten_prompt_base.strip():
             eval_output_base = ""
+        else:
+            try:
+                eval_output_base = _generate_with_inference_model(
+                    inference_client, inference_model, rewritten_prompt_base, inference_max_tokens
+                )
+            except Exception as e:
+                print(f"Error generating with base rewritten prompt for sample {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                eval_output_base = ""
         
         # Evaluate base output
         try:
@@ -631,9 +655,36 @@ def run_evaluation(
                 result[key] = value
         
         results.append(result)
+        
+        # Print summary every 50 samples
+        if (i + 1) % 50 == 0:
+            current_rewards_finetuned = [r["reward_finetuned"] for r in results]
+            current_rewards_base = [r["reward_base"] for r in results]
+            current_improvements = [r["improvement"] for r in results]
+            
+            current_stats = {
+                "num_samples": len(results),
+                "mean_reward_finetuned": sum(current_rewards_finetuned) / len(current_rewards_finetuned) if current_rewards_finetuned else 0.0,
+                "mean_reward_base": sum(current_rewards_base) / len(current_rewards_base) if current_rewards_base else 0.0,
+                "mean_improvement": sum(current_improvements) / len(current_improvements) if current_improvements else 0.0,
+                "num_improved": sum(1 for imp in current_improvements if imp > 0),
+                "num_worse": sum(1 for imp in current_improvements if imp < 0),
+                "num_same": sum(1 for imp in current_improvements if imp == 0),
+            }
+            
+            print(f"\n{'='*60}")
+            print(f"Progress Update: {current_stats['num_samples']} samples completed")
+            print(f"{'='*60}")
+            print(f"Fine-tuned Rewriter - Mean reward: {current_stats['mean_reward_finetuned']:.4f}")
+            print(f"Base Rewriter        - Mean reward: {current_stats['mean_reward_base']:.4f}")
+            print(f"Mean improvement: {current_stats['mean_improvement']:.4f}")
+            print(f"Improved: {current_stats['num_improved']} ({100*current_stats['num_improved']/current_stats['num_samples']:.1f}%) | "
+                  f"Worse: {current_stats['num_worse']} ({100*current_stats['num_worse']/current_stats['num_samples']:.1f}%) | "
+                  f"Same: {current_stats['num_same']} ({100*current_stats['num_same']/current_stats['num_samples']:.1f}%)")
+            print(f"{'='*60}\n")
     
     # Calculate statistics
-    print(f"\n7. Calculating statistics...")
+    print(f"\n7. Calculating final statistics...")
     rewards_finetuned = [r["reward_finetuned"] for r in results]
     rewards_base = [r["reward_base"] for r in results]
     improvements = [r["improvement"] for r in results]
@@ -874,13 +925,13 @@ def main():
     parser.add_argument(
         "--rewriter-max-tokens",
         type=int,
-        default=512,
+        default=5012,
         help="Maximum tokens for prompt rewriting"
     )
     parser.add_argument(
         "--inference-max-tokens",
         type=int,
-        default=256,
+        default=5012,
         help="Maximum tokens for inference (task completion)"
     )
     
