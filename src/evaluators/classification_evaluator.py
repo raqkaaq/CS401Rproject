@@ -30,7 +30,7 @@ class ClassificationEvaluator(BaseEvaluator):
         else:
             return 0.0
         
-        base_llm_output = base_llm_output.strip().lower()
+        base_llm_output = base_llm_output.strip()
         matching_case = {
             1: "World",
             2: "Sports",
@@ -43,7 +43,11 @@ class ClassificationEvaluator(BaseEvaluator):
         else:
             return 0.0
 
-        if base_llm_output.strip().lower() == gold_label_str.strip().lower():
+        # Check if the answer is in the last 75 characters
+        last_75_chars = base_llm_output[-75:].lower()
+        gold_label_lower = gold_label_str.strip().lower()
+        
+        if gold_label_lower in last_75_chars:
             return 1.0
         else:
             return 0.0
