@@ -770,151 +770,151 @@ def run_evaluation(
         # Sequential processing (original code)
         for i, sample in enumerate(tqdm(test_data, desc="Evaluating")):
             # Extract prompt messages
-        prompt_messages = sample.get("prompt", [])
-         
-        # Handle case where prompt_messages might be a string representation
-        if isinstance(prompt_messages, str):
-            try:
-                import ast
-                prompt_messages = ast.literal_eval(prompt_messages)
-            except:
-                print(f"Warning: Sample {i} has invalid prompt format (string that can't be parsed), skipping")
+            prompt_messages = sample.get("prompt", [])
+            
+            # Handle case where prompt_messages might be a string representation
+            if isinstance(prompt_messages, str):
+                try:
+                    import ast
+                    prompt_messages = ast.literal_eval(prompt_messages)
+                except:
+                    print(f"Warning: Sample {i} has invalid prompt format (string that can't be parsed), skipping")
+                    continue
+            
+            if not prompt_messages:
+                print(f"Warning: Sample {i} has no prompt, skipping")
                 continue
-        
-        if not prompt_messages:
-            print(f"Warning: Sample {i} has no prompt, skipping")
-            continue
-        
-        if not isinstance(prompt_messages, list):
-            print(f"Warning: Sample {i} prompt is not a list (type: {type(prompt_messages)}), skipping")
-            continue
-        
-        # Get original user prompt
-        original_user_prompt = None
-        system_prompt = ""
-        for msg in prompt_messages:
-            if not isinstance(msg, dict):
+            
+            if not isinstance(prompt_messages, list):
+                print(f"Warning: Sample {i} prompt is not a list (type: {type(prompt_messages)}), skipping")
                 continue
-            role = msg.get("role", "")
-            if role == "user":
-                original_user_prompt = msg.get("content", "")
-            elif role == "system":
-                system_prompt = msg.get("content", "")
-        
-        if not original_user_prompt:
-            print(f"Warning: Sample {i} has no user prompt, skipping")
-            continue
-        
-        # ===== FINE-TUNED REWRITER PATH =====
-        # Generate rewritten prompt using fine-tuned model
-        try:
-            rewritten_prompt_finetuned = generate_rewritten_prompt(
-                finetuned_rewriter_client,
-                prompt_messages,
-                max_tokens=rewriter_max_tokens
-            )
-            if not rewritten_prompt_finetuned or rewritten_prompt_finetuned.strip() == "":
-                print(f"Warning: Sample {i} - fine-tuned rewriter produced empty output")
-        except Exception as e:
-            print(f"Error rewriting prompt with fine-tuned model for sample {i}: {e}")
-            import traceback
-            traceback.print_exc()
-            rewritten_prompt_finetuned = ""
-        
-        # Attempt task with rewritten prompt (fine-tuned)
-        # Skip if rewritten prompt is empty
-        if not rewritten_prompt_finetuned or not rewritten_prompt_finetuned.strip():
-            eval_output_finetuned = ""
-        else:
+            
+            # Get original user prompt
+            original_user_prompt = None
+            system_prompt = ""
+            for msg in prompt_messages:
+                if not isinstance(msg, dict):
+                    continue
+                role = msg.get("role", "")
+                if role == "user":
+                    original_user_prompt = msg.get("content", "")
+                elif role == "system":
+                    system_prompt = msg.get("content", "")
+            
+            if not original_user_prompt:
+                print(f"Warning: Sample {i} has no user prompt, skipping")
+                continue
+            
+            # ===== FINE-TUNED REWRITER PATH =====
+            # Generate rewritten prompt using fine-tuned model
             try:
-                eval_output_finetuned = _generate_with_inference_model(
-                    inference_client, inference_model, rewritten_prompt_finetuned, inference_max_tokens
+                rewritten_prompt_finetuned = generate_rewritten_prompt(
+                    finetuned_rewriter_client,
+                    prompt_messages,
+                    max_tokens=rewriter_max_tokens
                 )
+                if not rewritten_prompt_finetuned or rewritten_prompt_finetuned.strip() == "":
+                    print(f"Warning: Sample {i} - fine-tuned rewriter produced empty output")
             except Exception as e:
-                print(f"Error generating with fine-tuned rewritten prompt for sample {i}: {e}")
+                print(f"Error rewriting prompt with fine-tuned model for sample {i}: {e}")
                 import traceback
                 traceback.print_exc()
+                rewritten_prompt_finetuned = ""
+            
+            # Attempt task with rewritten prompt (fine-tuned)
+            # Skip if rewritten prompt is empty
+            if not rewritten_prompt_finetuned or not rewritten_prompt_finetuned.strip():
                 eval_output_finetuned = ""
-        
-        # Evaluate fine-tuned output
-        try:
-            reward_finetuned = _evaluate_solution(
-                evaluator,
-                eval_output_finetuned,
-                sample,
-                evaluator_type
-            )
-        except Exception as e:
-            print(f"Error evaluating fine-tuned output for sample {i}: {e}")
-            import traceback
-            traceback.print_exc()
-            reward_finetuned = 0.0
-        
-        # ===== BASE REWRITER PATH =====
-        # Generate rewritten prompt using base model
-        try:
-            rewritten_prompt_base = generate_rewritten_prompt(
-                base_rewriter_client,
-                prompt_messages,
-                max_tokens=rewriter_max_tokens
-            )
-            if not rewritten_prompt_base or rewritten_prompt_base.strip() == "":
-                print(f"Warning: Sample {i} - base rewriter produced empty output")
-        except Exception as e:
-            print(f"Error rewriting prompt with base model for sample {i}: {e}")
-            import traceback
-            traceback.print_exc()
-            rewritten_prompt_base = ""
-        
-        # Attempt task with rewritten prompt (base)
-        # Skip if rewritten prompt is empty
-        if not rewritten_prompt_base or not rewritten_prompt_base.strip():
-            eval_output_base = ""
-        else:
+            else:
+                try:
+                    eval_output_finetuned = _generate_with_inference_model(
+                        inference_client, inference_model, rewritten_prompt_finetuned, inference_max_tokens
+                    )
+                except Exception as e:
+                    print(f"Error generating with fine-tuned rewritten prompt for sample {i}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    eval_output_finetuned = ""
+            
+            # Evaluate fine-tuned output
             try:
-                eval_output_base = _generate_with_inference_model(
-                    inference_client, inference_model, rewritten_prompt_base, inference_max_tokens
+                reward_finetuned = _evaluate_solution(
+                    evaluator,
+                    eval_output_finetuned,
+                    sample,
+                    evaluator_type
                 )
             except Exception as e:
-                print(f"Error generating with base rewritten prompt for sample {i}: {e}")
+                print(f"Error evaluating fine-tuned output for sample {i}: {e}")
                 import traceback
                 traceback.print_exc()
+                reward_finetuned = 0.0
+            
+            # ===== BASE REWRITER PATH =====
+            # Generate rewritten prompt using base model
+            try:
+                rewritten_prompt_base = generate_rewritten_prompt(
+                    base_rewriter_client,
+                    prompt_messages,
+                    max_tokens=rewriter_max_tokens
+                )
+                if not rewritten_prompt_base or rewritten_prompt_base.strip() == "":
+                    print(f"Warning: Sample {i} - base rewriter produced empty output")
+            except Exception as e:
+                print(f"Error rewriting prompt with base model for sample {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                rewritten_prompt_base = ""
+            
+            # Attempt task with rewritten prompt (base)
+            # Skip if rewritten prompt is empty
+            if not rewritten_prompt_base or not rewritten_prompt_base.strip():
                 eval_output_base = ""
-        
-        # Evaluate base output
-        try:
-            reward_base = _evaluate_solution(
-                evaluator,
-                eval_output_base,
-                sample,
-                evaluator_type
-            )
-        except Exception as e:
-            print(f"Error evaluating base output for sample {i}: {e}")
-            import traceback
-            traceback.print_exc()
-            reward_base = 0.0
-        
-        # Store results
-        result = {
-            "sample_index": i,
-            "original_prompt": original_user_prompt,
-            "rewritten_prompt_finetuned": rewritten_prompt_finetuned,
-            "rewritten_prompt_base": rewritten_prompt_base,
-            "eval_output_finetuned": eval_output_finetuned,
-            "eval_output_base": eval_output_base,
-            "reward_finetuned": reward_finetuned,
-            "reward_base": reward_base,
-            "improvement": reward_finetuned - reward_base,
-        }
-        
-        # Include any additional fields from the sample
-        for key, value in sample.items():
-            if key != "prompt" and key not in result:
-                result[key] = value
-        
-        results.append(result)
-        
+            else:
+                try:
+                    eval_output_base = _generate_with_inference_model(
+                        inference_client, inference_model, rewritten_prompt_base, inference_max_tokens
+                    )
+                except Exception as e:
+                    print(f"Error generating with base rewritten prompt for sample {i}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    eval_output_base = ""
+            
+            # Evaluate base output
+            try:
+                reward_base = _evaluate_solution(
+                    evaluator,
+                    eval_output_base,
+                    sample,
+                    evaluator_type
+                )
+            except Exception as e:
+                print(f"Error evaluating base output for sample {i}: {e}")
+                import traceback
+                traceback.print_exc()
+                reward_base = 0.0
+            
+            # Store results
+            result = {
+                "sample_index": i,
+                "original_prompt": original_user_prompt,
+                "rewritten_prompt_finetuned": rewritten_prompt_finetuned,
+                "rewritten_prompt_base": rewritten_prompt_base,
+                "eval_output_finetuned": eval_output_finetuned,
+                "eval_output_base": eval_output_base,
+                "reward_finetuned": reward_finetuned,
+                "reward_base": reward_base,
+                "improvement": reward_finetuned - reward_base,
+            }
+            
+            # Include any additional fields from the sample
+            for key, value in sample.items():
+                if key != "prompt" and key not in result:
+                    result[key] = value
+            
+            results.append(result)
+            
             # Print summary every 50 samples
             if (i + 1) % 50 == 0:
                 _print_progress_summary(results)
