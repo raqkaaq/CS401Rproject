@@ -290,6 +290,9 @@ class HFClient(LLMClient):
         do_sample: bool = False,
         top_k: int = 50,
         top_p: float = 1.0,
+        repetition_penalty: float = 1.0,
+        num_beams: int = 1,
+        do_sample: bool = False,
         use_cache: bool = True,
     ) -> str:
         """Generate text with tunable generation params. Defaults favor greedy decoding for speed."""
@@ -308,6 +311,9 @@ class HFClient(LLMClient):
                 do_sample=bool(do_sample),
                 top_k=int(top_k),
                 top_p=float(top_p),
+                num_beams=int(num_beams),
+                do_sample=bool(do_sample),
+                repetition_penalty=float(repetition_penalty),
                 use_cache=bool(use_cache),
             )
         # Extract only the newly generated tokens (not the input prompt)
@@ -322,6 +328,9 @@ class HFClient(LLMClient):
         max_new_tokens: int = 64,
         do_sample: bool = False,
         top_k: int = 50,
+        num_beams: int = 1,
+        do_sample: bool = False,
+        repetition_penalty: float = 1.0,
         top_p: float = 1.0,
         use_cache: bool = True,
     ) -> List[str]:
@@ -343,6 +352,9 @@ class HFClient(LLMClient):
                 do_sample=bool(do_sample),
                 top_k=int(top_k),
                 top_p=float(top_p),
+                num_beams=int(num_beams),
+                do_sample=bool(do_sample),
+                repetition_penalty=float(repetition_penalty),
                 use_cache=bool(use_cache),
             )
         # Decode all outputs, extracting only the newly generated tokens
