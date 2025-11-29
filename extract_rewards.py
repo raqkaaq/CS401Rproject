@@ -33,7 +33,7 @@ def extract_reward_arrays_from_file(file_path):
 
 def main():
     # Input file
-    input_file = Path('outputs/grpo_8743727.out')
+    input_file = Path('outputs/math.out')
     
     # Extract all reward arrays
     print(f"Extracting reward arrays from {input_file}...")
@@ -49,7 +49,7 @@ def main():
     print(f"Total rewards in extracted arrays: {total_rewards}")
     
     # Save to JSON
-    output_file = Path('outputs/grpo_8743727_every_4th_reward.json')
+    output_file = Path('outputs/math_rewards.json')
     with open(output_file, 'w') as f:
         json.dump(every_4th_array, f, indent=2)
     
