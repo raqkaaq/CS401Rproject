@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any, List
 from trl.rewards import accuracy_reward
 from .base_evalator import BaseEvaluator
+import re
 
 class ClassificationEvaluator(BaseEvaluator):
     """
