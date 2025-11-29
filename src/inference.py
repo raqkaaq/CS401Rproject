@@ -311,7 +311,6 @@ class HFClient(LLMClient):
                 top_k=int(top_k),
                 top_p=float(top_p),
                 num_beams=int(num_beams),
-                do_sample=bool(do_sample),
                 repetition_penalty=float(repetition_penalty),
                 use_cache=bool(use_cache),
             )
@@ -351,7 +350,6 @@ class HFClient(LLMClient):
                 top_k=int(top_k),
                 top_p=float(top_p),
                 num_beams=int(num_beams),
-                do_sample=bool(do_sample),
                 repetition_penalty=float(repetition_penalty),
                 use_cache=bool(use_cache),
             )
