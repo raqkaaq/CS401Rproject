@@ -153,13 +153,42 @@ class BaseEvaluator(ABC):
         Returns:
             List of reward scores (floats).
         """
-        completion_strings = [completion for completion in completions]
+        # Extract completion strings (handle both string and list-of-dicts formats)
+        completion_strings = []
+        for completion in completions:
+            if isinstance(completion, str):
+                completion_strings.append(completion)
+            elif isinstance(completion, list) and len(completion) > 0:
+                if isinstance(completion[0], dict) and "content" in completion[0]:
+                    completion_strings.append(completion[0]["content"])
+                else:
+                    completion_strings.append(str(completion[0]))
+            else:
+                completion_strings.append(str(completion))
+        
+        # Log first rewritten prompt (completion from rewriter)
+        if completion_strings:
+            print("\n" + "="*80)
+            print("FIRST REWRITTEN PROMPT (from rewriter):")
+            print("="*80)
+            print(completion_strings[0])
+            print("="*80 + "\n")
+        
         rewards = []
-        for completion_string in completion_strings:
+        for i, completion_string in enumerate(completion_strings):
             base_llm_output = self.pass_to_inference(completion_string, **kwargs)
+            
+            # Log first base LLM output
+            if i == 0:
+                print("\n" + "="*80)
+                print("FIRST BASE LLM OUTPUT (from inference model):")
+                print("="*80)
+                print(base_llm_output)
+                print("="*80 + "\n")
+            
             reward = self.evaluate(base_llm_output, **kwargs)
             rewards.append(reward)
-        print(rewards)
+        print("Rewards: ", rewards)
         return rewards
     
     def math_reward(self, pred: str, gold: str) -> float:

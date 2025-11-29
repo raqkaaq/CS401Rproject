@@ -60,10 +60,26 @@ class MathEvaluator(BaseEvaluator):
             else:
                 prompt_strings.append(str(rewritten_prompt))
 
+        # Log first rewritten prompt (completion from rewriter)
+        if prompt_strings:
+            print("\n" + "="*80)
+            print("FIRST REWRITTEN PROMPT (from rewriter):")
+            print("="*80)
+            print(prompt_strings[0])
+            print("="*80 + "\n")
+        
         # Batch inference - much faster than sequential calls
         # Filter out 'prompts' from kwargs to avoid conflict with the prompts parameter
         filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'prompts'}
         base_llm_outputs = self.pass_to_inference_batch(prompt_strings, **filtered_kwargs)
+        
+        # Log first base LLM output
+        if base_llm_outputs:
+            print("\n" + "="*80)
+            print("FIRST BASE LLM OUTPUT (from inference model):")
+            print("="*80)
+            print(base_llm_outputs[0])
+            print("="*80 + "\n")
         
         # Format completions for accuracy_reward: it expects [[{"content": "..."}], ...]
         formatted_completions = [[{"content": output}] for output in base_llm_outputs]
