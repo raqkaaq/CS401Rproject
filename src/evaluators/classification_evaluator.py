@@ -17,8 +17,19 @@ class ClassificationEvaluator(BaseEvaluator):
         """
         Evaluate the classification output.
         """
-
-        gold_label = int(kwargs.get("label", None))
+        label = kwargs.get("label", None)
+        
+        # Handle both single value and list cases (defensive programming)
+        if isinstance(label, list):
+            if len(label) > 0:
+                gold_label = int(label[0])
+            else:
+                return 0.0
+        elif label is not None:
+            gold_label = int(label)
+        else:
+            return 0.0
+        
         base_llm_output = base_llm_output.strip().lower()
         matching_case = {
             1: "World",
@@ -27,10 +38,12 @@ class ClassificationEvaluator(BaseEvaluator):
             4: "Science/Technology",
         }
 
-        if gold_label is not None:
-            gold_label = matching_case[gold_label]
+        if gold_label in matching_case:
+            gold_label_str = matching_case[gold_label]
+        else:
+            return 0.0
 
-        if base_llm_output.strip().lower() == gold_label.strip().lower():
+        if base_llm_output.strip().lower() == gold_label_str.strip().lower():
             return 1.0
         else:
             return 0.0

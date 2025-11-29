@@ -186,7 +186,16 @@ class BaseEvaluator(ABC):
                 print(base_llm_output)
                 print("="*80 + "\n")
             
-            reward = self.evaluate(base_llm_output, **kwargs)
+            # Extract individual items from kwargs when they're lists (batched data)
+            # This handles the case where GRPOTrainer passes batched kwargs
+            individual_kwargs = {}
+            for key, value in kwargs.items():
+                if isinstance(value, list) and len(value) > i:
+                    individual_kwargs[key] = value[i]
+                else:
+                    individual_kwargs[key] = value
+            
+            reward = self.evaluate(base_llm_output, **individual_kwargs)
             rewards.append(reward)
         print("Rewards: ", rewards)
         return rewards
