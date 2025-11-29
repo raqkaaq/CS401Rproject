@@ -17,10 +17,11 @@ from src.finetune import Finetune
 from src.parsers.test_parser import TestParser
 from src.parsers.math_parser import MathParser
 from src.parsers.poem_parser import PoemParser
+from src.parsers.classification_parser import ClassificationParser
 from src.evaluators.test_evaluator import TestEvaluator
 from src.evaluators.math_evaluator import MathEvaluator
 from src.evaluators.poem_evaluator import PoemEvaluator
-
+from src.evaluators.classification_evaluator import ClassificationEvaluator
 
 def main():
     """Main entry point for training."""
@@ -39,7 +40,7 @@ def main():
         "--parser-type",
         type=str,
         default="test",
-        choices=["test", "math", "poem"],
+        choices=["test", "math", "poem", "classification"],
         help="Type of parser to use"
     )
     parser.add_argument(
@@ -66,7 +67,7 @@ def main():
         "--evaluator-type",
         type=str,
         default="test",
-        choices=["test", "math", "poem"],
+        choices=["test", "math", "poem", "classification"],
         help="Type of evaluator to use"
     )
     parser.add_argument(
@@ -197,6 +198,12 @@ def main():
             meta_prompt=args.meta_prompt,
             num_samples=args.num_samples
         )
+    elif args.parser_type == "classification":
+        parser_instance = ClassificationParser(
+            dataset_name=args.dataset_name,
+            meta_prompt=args.meta_prompt,
+            num_samples=args.num_samples
+        )
     else:
         raise ValueError(f"Unknown parser type: {args.parser_type}")
     
@@ -225,6 +232,14 @@ def main():
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
             max_tokens=512,
+            prefer_client=args.client_type
+        )
+    elif args.evaluator_type == "classification":
+        evaluator_instance = ClassificationEvaluator(
+            model=args.evaluator_model,
+            client=None,
+            temperature=0.0,
+            max_tokens=64,
             prefer_client=args.client_type
         )
     else:
