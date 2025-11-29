@@ -314,7 +314,7 @@ def generate_rewritten_prompt_batch(rewriter_client: HFClient, prompt_messages_l
     rewritten_prompts = []
     for i, output in enumerate(outputs):
         input_len = input_lengths[i]
-        generated_tokens = output[input_len:]
+        generated_tokens = output
         rewritten = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         rewritten_prompts.append(rewritten)
     
@@ -372,7 +372,7 @@ def generate_rewritten_prompt(rewriter_client: HFClient, prompt_messages: List[D
             )
         
         # Extract only the newly generated tokens (after input length)
-        generated_tokens = outputs[0][input_len:]
+        generated_tokens = outputs[0]
         rewritten = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         
         # If we got a non-empty result, return it
@@ -1247,7 +1247,7 @@ def _generate_with_inference_model(
         )
     
     # Extract only the newly generated tokens
-    generated_tokens = outputs[0][input_len:]
+    generated_tokens = outputs[0]
     return tokenizer.decode(generated_tokens, skip_special_tokens=True)
 
 
