@@ -74,8 +74,14 @@ class Finetune:
             for i, completion_content in enumerate(completion_contents):
                 print(f"\n[Completion {i+1}/{len(completion_contents)}]")
                 print("-" * 80)
+                print("Rewritten prompt (what inference model will receive):")
                 print(completion_content)
                 print("-" * 80)
+                # Also print kwargs to see what other data is available
+                if i == 0:  # Only print once to avoid spam
+                    print(f"Available kwargs keys: {list(kwargs.keys())}")
+                    if "solution" in kwargs:
+                        print(f"Sample solution: {kwargs['solution']}")
             print("="*80 + "\n")
             
             # Call the evaluator's reward_function
