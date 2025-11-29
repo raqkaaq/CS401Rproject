@@ -46,7 +46,17 @@ class ClassificationEvaluator(BaseEvaluator):
         # Check if the answer is in the last 30 characters
         last_30_chars = base_llm_output[-30:].lower()
         gold_label_lower = gold_label_str.strip().lower()
-        
+
+        # Also attempt to grab text after Classificaiton:
+        classification_text = re.search(r"Classification:\s*(.+)", base_llm_output)
+        if classification_text:
+            classification_text = classification_text.group(1).strip().lower()
+            if gold_label_lower in classification_text:
+                return 1.0
+            else:
+                return 0.0
+        else:
+            return 0.0
         if gold_label_lower in last_30_chars:
             return 1.0
         else:
