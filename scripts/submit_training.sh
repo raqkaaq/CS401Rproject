@@ -160,6 +160,8 @@ accelerate launch --mixed_precision=bf16 src/main.py \
   --batch-size 32 \
   --num-samples 1000 \
   --save-steps 25 \
+  --max-prompt-length 512 \
+  --max-completion-length 256 \
   --save-strategy steps \
   --logging-steps 10
 # Save options:

@@ -65,6 +65,7 @@ echo "Downloading datasets..."
 echo ""
 
 download_dataset "trl-lib/DeepMath-103K" "train"
+download_dataset "checkai/instruction-poems" "train"
 
 echo ""
 echo "=== Download Complete ==="

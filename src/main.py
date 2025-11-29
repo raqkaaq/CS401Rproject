@@ -134,6 +134,18 @@ def main():
         default=10,
         help="Log training metrics every N steps"
     )
+    parser.add_argument(
+        "--max-completion-length",
+        type=int,
+        default=None,
+        help="Maximum number of tokens for generated completions (default: model default, typically 256)"
+    )
+    parser.add_argument(
+        "--max-prompt-length",
+        type=int,
+        default=None,
+        help="Maximum number of tokens for input prompts (default: model default, typically 512)"
+    )
     
     args = parser.parse_args()
     
@@ -219,18 +231,28 @@ def main():
     # - 'no': only saves final model
     
     # Configure training with GPU optimizations
-    training_config = GRPOConfig(
-        output_dir=args.output_dir,
-        num_train_epochs=args.num_epochs,
-        learning_rate=args.learning_rate,
-        per_device_train_batch_size=args.batch_size,
-        logging_steps=args.logging_steps,
-        save_strategy=args.save_strategy,
-        save_steps=args.save_steps,  # Required parameter, but only used when save_strategy='steps'
-        bf16=torch.cuda.is_available(),  # Enable bf16 only if GPU is available (H200/H100/A100 support bf16)
+    training_config_kwargs = {
+        "output_dir": args.output_dir,
+        "num_train_epochs": args.num_epochs,
+        "learning_rate": args.learning_rate,
+        "per_device_train_batch_size": args.batch_size,
+        "logging_steps": args.logging_steps,
+        "save_strategy": args.save_strategy,
+        "save_steps": args.save_steps,  # Required parameter, but only used when save_strategy='steps'
+        "bf16": torch.cuda.is_available(),  # Enable bf16 only if GPU is available (H200/H100/A100 support bf16)
         # fp16=False,  # bf16 is preferred for newer GPUs
-        dataloader_pin_memory=torch.cuda.is_available(),  # Pin memory for faster GPU data transfer
-    )
+        "dataloader_pin_memory": torch.cuda.is_available(),  # Pin memory for faster GPU data transfer
+    }
+    
+    # Add token length limits if specified
+    if args.max_completion_length is not None:
+        training_config_kwargs["max_completion_length"] = args.max_completion_length
+        print(f"✓ Setting max_completion_length={args.max_completion_length} tokens")
+    if args.max_prompt_length is not None:
+        training_config_kwargs["max_prompt_length"] = args.max_prompt_length
+        print(f"✓ Setting max_prompt_length={args.max_prompt_length} tokens")
+    
+    training_config = GRPOConfig(**training_config_kwargs)
     
     # Create finetune instance
     print("Initializing Finetune...")

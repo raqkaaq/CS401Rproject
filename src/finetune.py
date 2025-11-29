@@ -32,6 +32,10 @@ class Finetune:
             parser: Parser instance that implements BaseParser interface
             evaluator: Evaluator instance that implements BaseEvaluator interface
             training_args: Optional GRPOConfig for training. If None, uses default config.
+                          To limit token generation during training, set:
+                          - max_completion_length: Maximum tokens for generated completions (e.g., 256)
+                          - max_prompt_length: Maximum tokens for input prompts (e.g., 512)
+                          Example: GRPOConfig(max_completion_length=256, max_prompt_length=512, ...)
         """
         self.model = model
         self.parser = parser
@@ -62,6 +66,17 @@ class Finetune:
             """
             # Extract content strings from GRPOTrainer's format
             completion_contents = [completion[0]["content"] for completion in completions]
+            
+            # Print the finetuned prompt outputs (completions)
+            print("\n" + "="*80)
+            print("FINETUNED PROMPT OUTPUTS (Training Step)")
+            print("="*80)
+            for i, completion_content in enumerate(completion_contents):
+                print(f"\n[Completion {i+1}/{len(completion_contents)}]")
+                print("-" * 80)
+                print(completion_content)
+                print("-" * 80)
+            print("="*80 + "\n")
             
             # Call the evaluator's reward_function
             return self.evaluator.reward_function(completion_contents, **kwargs)
