@@ -146,6 +146,12 @@ def main():
         default=None,
         help="Maximum number of tokens for input prompts (default: model default, typically 512)"
     )
+    parser.add_argument(
+        "--resume-from-checkpoint",
+        type=str,
+        default=None,
+        help="Path to checkpoint directory to resume from (e.g., './trainer_output/checkpoint-450'). If not specified, will auto-detect latest checkpoint in output_dir if training was interrupted."
+    )
     
     args = parser.parse_args()
     
@@ -265,7 +271,7 @@ def main():
     
     # Start training
     print("Starting training...")
-    finetune.train()
+    finetune.train(resume_from_checkpoint=args.resume_from_checkpoint)
     print("Training completed!")
 
 

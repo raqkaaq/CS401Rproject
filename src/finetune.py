@@ -149,9 +149,48 @@ class Finetune:
             except Exception as e:
                 print(f"Could not verify model device: {e}")
     
-    def train(self):
-        """Start training the model."""
+    def train(self, resume_from_checkpoint: Optional[str] = None):
+        """
+        Start training the model.
+        
+        Args:
+            resume_from_checkpoint: Optional path to checkpoint directory to resume from.
+                                   If None and checkpoints exist in output_dir, will auto-detect
+                                   the latest checkpoint.
+        """
+        # Auto-detect latest checkpoint if not specified
+        if resume_from_checkpoint is None:
+            output_dir = self.trainer.args.output_dir
+            if os.path.exists(output_dir):
+                # Find all checkpoint directories
+                checkpoints = []
+                for item in os.listdir(output_dir):
+                    checkpoint_path = os.path.join(output_dir, item)
+                    if os.path.isdir(checkpoint_path) and item.startswith("checkpoint-"):
+                        # Extract step number
+                        try:
+                            step_num = int(item.split("-")[1])
+                            checkpoints.append((step_num, checkpoint_path))
+                        except (ValueError, IndexError):
+                            continue
+                
+                if checkpoints:
+                    # Sort by step number and get the latest
+                    checkpoints.sort(key=lambda x: x[0])
+                    latest_checkpoint = checkpoints[-1][1]
+                    resume_from_checkpoint = latest_checkpoint
+                    print(f"✓ Auto-detected latest checkpoint: {resume_from_checkpoint}")
+                    print(f"  Resuming from step {checkpoints[-1][0]}")
+        
+        if resume_from_checkpoint:
+            if not os.path.exists(resume_from_checkpoint):
+                print(f"⚠ Warning: Checkpoint path does not exist: {resume_from_checkpoint}")
+                print("  Starting training from scratch instead.")
+                resume_from_checkpoint = None
+            else:
+                print(f"✓ Resuming training from checkpoint: {resume_from_checkpoint}")
+        
         print("Starting GRPO training...")
-        self.trainer.train()
+        self.trainer.train(resume_from_checkpoint=resume_from_checkpoint)
         print("Training completed!")
 
