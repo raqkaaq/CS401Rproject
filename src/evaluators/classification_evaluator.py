@@ -44,7 +44,7 @@ class ClassificationEvaluator(BaseEvaluator):
             return 0.0
 
         # Check if the answer is in the last 75 characters
-        last_75_chars = base_llm_output[-75:].lower()
+        last_75_chars = base_llm_output[-24:].lower()
         gold_label_lower = gold_label_str.strip().lower()
         
         if gold_label_lower in last_75_chars:
