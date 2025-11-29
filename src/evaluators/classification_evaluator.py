@@ -18,8 +18,8 @@ class ClassificationEvaluator(BaseEvaluator):
         Evaluate the classification output.
         """
 
-        gold_label = kwargs.get("label", None)
-
+        gold_label = int(kwargs.get("label", None))
+        base_llm_output = base_llm_output.strip().lower()
         matching_case = {
             1: "World",
             2: "Sports",

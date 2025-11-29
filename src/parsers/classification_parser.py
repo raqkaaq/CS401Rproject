@@ -158,11 +158,12 @@ class ClassificationParser(BaseParser):
             description = sample["description"]
             
             prompt_content = f"""
-            Classify the following news article into one of the following categories:
+            Classify the following news article. The categories are:
             - World
             - Sports
             - Business
             - Science/Technology
+            
             Title: {title}\nDescription: {description}"""
 
             prompt_messages = [
