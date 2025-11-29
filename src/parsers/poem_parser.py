@@ -164,17 +164,15 @@ class PoemParser(BaseParser):
             # Create prompt_messages with system prompt and instruction
             prompt_messages = [
                 {
-                    "content": self.meta_prompt,
-                    "role": "system"
-                },
-                {
-                    "content": instruction,
+                    "content": self.meta_prompt + "\n\n" + instruction,
                     "role": "user"
                 }
             ]
             
             parsed_sample = {
-                "prompt": prompt_messages
+                "prompt": prompt_messages,
+                # Store original instruction separately so reward function can access it
+                "original_instruction": instruction
             }
             
             # Include other fields from the original sample if they exist

@@ -170,7 +170,9 @@ class MathParser(BaseParser):
             ]
             
             parsed_sample = {
-                "prompt": prompt_messages
+                "prompt": prompt_messages,
+                # Store original question separately so reward function can access it
+                "original_question": prompt_content
             }
             
             # Include other fields from the original sample if they exist

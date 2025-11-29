@@ -86,7 +86,9 @@ class TestParser(BaseParser):
                         "content": prompt_content,
                         "role": "user"
                     }
-                ]
+                ],
+                # Store original question separately so reward function can access it
+                "original_question": sample["prompt"]  # Original question before meta_prompt prepending
             }
             
             # Include other fields from the original sample if they exist
