@@ -252,6 +252,13 @@ def load_inference_model(model: str) -> HFClient:
     return client
 
 
+def _get_model(model_or_wrapper):
+    """Get the actual model from either a model or DataParallel wrapper."""
+    if isinstance(model_or_wrapper, torch.nn.DataParallel):
+        return model_or_wrapper.module
+    return model_or_wrapper
+
+
 def generate_rewritten_prompt_batch(rewriter_client: HFClient, prompt_messages_list: List[List[Dict[str, str]]], 
                                      max_tokens: int = 5012) -> List[str]:
     """
@@ -292,9 +299,10 @@ def generate_rewritten_prompt_batch(rewriter_client: HFClient, prompt_messages_l
     # Get input lengths for each prompt
     input_lengths = [(toks.get("attention_mask")[i] == 1).sum().item() for i in range(len(rewriter_inputs))]
     
-    # Batch generate
+    # Batch generate - handle DataParallel wrapper
+    model = _get_model(rewriter_client.model)
     with torch.inference_mode():
-        outputs = rewriter_client.model.generate(
+        outputs = model.generate(
             input_ids=toks.get("input_ids"),
             attention_mask=toks.get("attention_mask"),
             max_new_tokens=max_tokens,
@@ -351,10 +359,11 @@ def generate_rewritten_prompt(rewriter_client: HFClient, prompt_messages: List[D
     input_len = (toks.get("attention_mask") == 1).sum().item()
     
     # Retry up to max_retries times if output is empty
+    model = _get_model(rewriter_client.model)
     for attempt in range(max_retries):
-        # Generate using the model directly
+        # Generate using the model directly - handle DataParallel wrapper
         with torch.inference_mode():
-            outputs = rewriter_client.model.generate(
+            outputs = model.generate(
                 input_ids=toks.get("input_ids"),
                 attention_mask=toks.get("attention_mask"),
                 max_new_tokens=max_tokens,
@@ -1105,8 +1114,10 @@ def _generate_with_inference_model(
     toks = {k: v.to(inference_client.device) for k, v in toks.items()}
     input_len = (toks.get("attention_mask") == 1).sum().item()
     
+    # Handle DataParallel wrapper
+    model = _get_model(inference_client.model)
     with torch.inference_mode():
-        outputs = inference_client.model.generate(
+        outputs = model.generate(
             input_ids=toks.get("input_ids"),
             attention_mask=toks.get("attention_mask"),
             max_new_tokens=max_tokens,

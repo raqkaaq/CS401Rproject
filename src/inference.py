@@ -298,8 +298,10 @@ class HFClient(LLMClient):
         toks = self.tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
         toks = {k: v.to(self.device) for k, v in toks.items()}
         # Use inference_mode for faster inference when gradients aren't needed
+        # Handle DataParallel wrapper
+        model = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
         with torch.inference_mode():
-            outputs = self.model.generate(
+            outputs = model.generate(
                 input_ids=toks.get("input_ids"),
                 attention_mask=toks.get("attention_mask"),
                 max_new_tokens=int(max_new_tokens),
@@ -328,8 +330,10 @@ class HFClient(LLMClient):
         toks = {k: v.to(self.device) for k, v in toks.items()}
         input_lengths = toks.get("input_ids").shape[1]
         # Use inference_mode for faster inference when gradients aren't needed
+        # Handle DataParallel wrapper
+        model = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
         with torch.inference_mode():
-            outputs = self.model.generate(
+            outputs = model.generate(
                 input_ids=toks.get("input_ids"),
                 attention_mask=toks.get("attention_mask"),
                 max_new_tokens=int(max_new_tokens),
