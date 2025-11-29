@@ -34,12 +34,28 @@ class PoemEvaluator(BaseEvaluator):
         """
         Uses poetrytools to guess the rhyme scheme for the poem.
         Handles 'X' (no rhyme found) correctly in scoring.
+
+        poetrytools.rhyme_scheme can occasionally raise IndexError (and similar)
+        on odd or very short inputs, so we guard against that here and fall back
+        to an empty scheme so training can continue.
         """
-        tokenized = poetrytools.tokenize(poem_text)
-        scheme_list = poetrytools.rhyme_scheme(tokenized)  # e.g., ['a', 'a', 'X', 'b', 'b']
+        try:
+            tokenized = poetrytools.tokenize(poem_text)
+            # poetrytools expects a list of lines; make sure we don't pass
+            # obviously bad input that tends to break it.
+            if not tokenized or len(tokenized) < 2:
+                return ""
+
+            scheme_list = poetrytools.rhyme_scheme(tokenized)  # e.g., ['a', 'a', 'X', 'b', 'b']
+        except Exception as e:
+            # Log and fall back gracefully instead of crashing the trainer
+            print("[PoemEvaluator] Failed to extract rhyme scheme:", repr(e))
+            print("[PoemEvaluator] Offending text (truncated to 500 chars):")
+            print(poem_text[:500])
+            return ""
         
         # Filter out None/empty entries if poetrytools returns them
-        scheme_list = [label for label in scheme_list if label is not None and label != '']
+        scheme_list = [label for label in scheme_list if label is not None and label != ""]
         
         return "".join(scheme_list)  # e.g., "aaXbb"
 
