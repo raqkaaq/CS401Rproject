@@ -104,6 +104,7 @@ class BaseEvaluator(ABC):
                 prompt=prompt,
                 num_beams=1,
                 do_sample=True,
+                repetition_penalty=1.15,
                 max_new_tokens=self.max_tokens
             )
         else:
@@ -137,6 +138,7 @@ class BaseEvaluator(ABC):
                 prompts=prompts,
                 num_beams=1,
                 do_sample=True,
+                repetition_penalty=1.15,
                 max_new_tokens=self.max_tokens
             )
         else:
