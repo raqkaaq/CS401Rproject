@@ -103,7 +103,6 @@ class BaseEvaluator(ABC):
             return self.client.generate(
                 model_id=self.model,
                 prompt=prompt,
-                no_repeat_ngram_size=3,
                 repetition_penalty=1.15,
                 max_new_tokens=self.max_tokens
             )
@@ -131,14 +130,12 @@ class BaseEvaluator(ABC):
                 prompts=prompts,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                no_repeat_ngram_size=3,
                 repetition_penalty=1.15,
             )
         elif client_type == 'HFClient':
             return self.client.generate_batch(
                 model_id=self.model,
                 prompts=prompts,
-                no_repeat_ngram_size=3,
                 repetition_penalty=1.15,
                 max_new_tokens=self.max_tokens
             )
