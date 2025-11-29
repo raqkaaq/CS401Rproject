@@ -310,7 +310,10 @@ class HFClient(LLMClient):
                 top_p=float(top_p),
                 use_cache=bool(use_cache),
             )
-        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # Extract only the newly generated tokens (not the input prompt)
+        input_len = (toks.get("attention_mask")[0] == 1).sum().item()
+        generated_tokens = outputs[0][input_len:]
+        return self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
     
     def generate_batch(
         self,
