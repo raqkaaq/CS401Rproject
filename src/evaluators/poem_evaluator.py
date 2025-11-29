@@ -26,7 +26,7 @@ class PoemEvaluator(BaseEvaluator):
         
         participating = sum(
             1 for ch in rhyme_scheme
-            if ch != 'X' and counts[ch] >= 2  # EXCLUDE X entirely!
+            if ch != 'X' and ch != ' ' and ch in "abcdefghijklmnopqrstuvwxyz" and counts[ch] >= 2  # EXCLUDE X entirely!
         )
         return participating / n_lines
 
