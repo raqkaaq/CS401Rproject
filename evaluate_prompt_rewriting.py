@@ -252,6 +252,67 @@ def load_inference_model(model: str) -> HFClient:
     return client
 
 
+def generate_rewritten_prompt_batch(rewriter_client: HFClient, prompt_messages_list: List[List[Dict[str, str]]], 
+                                     max_tokens: int = 5012) -> List[str]:
+    """
+    Generate rewritten prompts for multiple inputs in batch (much faster than sequential).
+    
+    Args:
+        rewriter_client: HFClient instance with the rewriter model loaded
+        prompt_messages_list: List of prompt message lists (one per sample)
+        max_tokens: Maximum tokens for rewriting
+    
+    Returns:
+        List of rewritten prompt strings
+    """
+    # Construct input prompts from all messages
+    rewriter_inputs = []
+    for prompt_messages in prompt_messages_list:
+        system_msg = ""
+        user_msg = ""
+        
+        for msg in prompt_messages:
+            if msg.get("role") == "system":
+                system_msg = msg.get("content", "")
+            elif msg.get("role") == "user":
+                user_msg = msg.get("content", "")
+        
+        if system_msg:
+            rewriter_input = f"{system_msg}\n\n{user_msg}"
+        else:
+            rewriter_input = user_msg
+        
+        rewriter_inputs.append(rewriter_input)
+    
+    # Batch tokenize and generate
+    tokenizer = rewriter_client.tokenizer
+    toks = tokenizer(rewriter_inputs, return_tensors="pt", padding=True, truncation=True)
+    toks = {k: v.to(rewriter_client.device) for k, v in toks.items()}
+    
+    # Get input lengths for each prompt
+    input_lengths = [(toks.get("attention_mask")[i] == 1).sum().item() for i in range(len(rewriter_inputs))]
+    
+    # Batch generate
+    with torch.inference_mode():
+        outputs = rewriter_client.model.generate(
+            input_ids=toks.get("input_ids"),
+            attention_mask=toks.get("attention_mask"),
+            max_new_tokens=max_tokens,
+            do_sample=False,
+            use_cache=True,
+        )
+    
+    # Extract only the newly generated tokens for each output
+    rewritten_prompts = []
+    for i, output in enumerate(outputs):
+        input_len = input_lengths[i]
+        generated_tokens = output[input_len:]
+        rewritten = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        rewritten_prompts.append(rewritten)
+    
+    return rewritten_prompts
+
+
 def generate_rewritten_prompt(rewriter_client: HFClient, prompt_messages: List[Dict[str, str]], 
                               max_tokens: int = 5012, max_retries: int = 3) -> str:
     """
@@ -398,6 +459,8 @@ def run_evaluation(
     dataset_name: Optional[str] = None,
     rewriter_max_tokens: int = 5012,
     inference_max_tokens: int = 5012,
+    batch_size: int = 1,
+    num_gpus: int = 1,
     output_file: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
@@ -419,6 +482,8 @@ def run_evaluation(
         dataset_name: Dataset name for parser (optional)
         rewriter_max_tokens: Max tokens for prompt rewriting
         inference_max_tokens: Max tokens for inference
+        batch_size: Batch size for processing (1 = sequential, >1 = batched, much faster)
+        num_gpus: Number of GPUs to use (1 = single GPU, >1 = multi-GPU via DataParallel)
         output_file: Optional file path to save results (JSON)
     
     Returns:
@@ -461,20 +526,47 @@ def run_evaluation(
     
     print(f"✓ Loaded {len(test_data)} test samples")
     
+    # Setup multi-GPU if requested
+    if num_gpus > 1 and torch.cuda.is_available():
+        if torch.cuda.device_count() < num_gpus:
+            print(f"Warning: Requested {num_gpus} GPUs but only {torch.cuda.device_count()} available. Using {torch.cuda.device_count()} GPUs.")
+            num_gpus = torch.cuda.device_count()
+        print(f"\n2. Setting up multi-GPU support ({num_gpus} GPUs)")
+    else:
+        num_gpus = 1
+    
     # Load fine-tuned rewriter model
-    print(f"\n2. Loading fine-tuned rewriter model from: {rewriter_model_dir}")
+    print(f"\n{3 if num_gpus == 1 else 3}. Loading fine-tuned rewriter model from: {rewriter_model_dir}")
     finetuned_rewriter_client = load_rewriter_model(rewriter_model_dir)
     
+    # Setup multi-GPU for rewriter models if requested
+    if num_gpus > 1 and torch.cuda.is_available():
+        if hasattr(finetuned_rewriter_client, 'model') and finetuned_rewriter_client.model is not None:
+            finetuned_rewriter_client.model = torch.nn.DataParallel(finetuned_rewriter_client.model)
+            print(f"  Fine-tuned rewriter model wrapped with DataParallel for {num_gpus} GPUs")
+    
     # Load base rewriter model
-    print(f"\n3. Loading base rewriter model: {base_rewriter_model}")
+    print(f"\n{4 if num_gpus == 1 else 4}. Loading base rewriter model: {base_rewriter_model}")
     base_rewriter_client = load_rewriter_model(base_rewriter_model)
     
+    # Setup multi-GPU for base rewriter if requested
+    if num_gpus > 1 and torch.cuda.is_available():
+        if hasattr(base_rewriter_client, 'model') and base_rewriter_client.model is not None:
+            base_rewriter_client.model = torch.nn.DataParallel(base_rewriter_client.model)
+            print(f"  Base rewriter model wrapped with DataParallel for {num_gpus} GPUs")
+    
     # Load inference model
-    print(f"\n4. Loading inference model: {inference_model}")
+    print(f"\n{5 if num_gpus == 1 else 5}. Loading inference model: {inference_model}")
     inference_client = load_inference_model(inference_model)
     
+    # Setup multi-GPU for inference model if requested
+    if num_gpus > 1 and torch.cuda.is_available():
+        if hasattr(inference_client, 'model') and inference_client.model is not None:
+            inference_client.model = torch.nn.DataParallel(inference_client.model)
+            print(f"  Inference model wrapped with DataParallel for {num_gpus} GPUs")
+    
     # Create evaluator
-    print(f"\n5. Creating {evaluator_type} evaluator...")
+    print(f"\n{6 if num_gpus == 1 else 6}. Creating {evaluator_type} evaluator...")
     if evaluator_type == "test":
             evaluator = TestEvaluator(
             model=inference_model,
@@ -505,14 +597,181 @@ def run_evaluation(
     print("✓ Evaluator created")
     
     # Run evaluation on each test sample
-    print(f"\n6. Running evaluation on {len(test_data)} samples...")
+    print(f"\n{7 if num_gpus == 1 else 7}. Running evaluation on {len(test_data)} samples...")
+    if batch_size > 1:
+        print(f"   Using batch size: {batch_size} (much faster!)")
+    if num_gpus > 1:
+        print(f"   Using {num_gpus} GPUs with DataParallel")
     print("   Flow: Rewriter -> Rewritten Prompt -> Inference Model -> Output -> Reward")
     results = []
     
-    for i, sample in enumerate(tqdm(test_data, desc="Evaluating")):
-        # Extract prompt messages
+    # Pre-process all samples to extract valid prompt messages
+    valid_samples = []
+    valid_indices = []
+    for i, sample in enumerate(test_data):
         prompt_messages = sample.get("prompt", [])
         
+        # Handle case where prompt_messages might be a string representation
+        if isinstance(prompt_messages, str):
+            try:
+                import ast
+                prompt_messages = ast.literal_eval(prompt_messages)
+            except:
+                continue
+        
+        if not prompt_messages or not isinstance(prompt_messages, list):
+            continue
+        
+        # Get original user prompt
+        original_user_prompt = None
+        for msg in prompt_messages:
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                original_user_prompt = msg.get("content", "")
+                break
+        
+        if original_user_prompt:
+            valid_samples.append((i, sample, prompt_messages))
+            valid_indices.append(i)
+    
+    print(f"   Processing {len(valid_samples)} valid samples...")
+    
+    # Process in batches if batch_size > 1
+    if batch_size > 1:
+        # Process in batches
+        for batch_start in tqdm(range(0, len(valid_samples), batch_size), desc="Processing batches"):
+            batch_end = min(batch_start + batch_size, len(valid_samples))
+            batch_samples = valid_samples[batch_start:batch_end]
+            
+            # Extract prompt messages for batch
+            batch_prompt_messages = [pm for _, _, pm in batch_samples]
+            
+            # Batch rewrite with fine-tuned model
+            try:
+                rewritten_prompts_finetuned = generate_rewritten_prompt_batch(
+                    finetuned_rewriter_client,
+                    batch_prompt_messages,
+                    max_tokens=rewriter_max_tokens
+                )
+            except Exception as e:
+                print(f"Error in batch rewriting (fine-tuned) for batch {batch_start}-{batch_end}: {e}")
+                rewritten_prompts_finetuned = [""] * len(batch_samples)
+            
+            # Batch rewrite with base model
+            try:
+                rewritten_prompts_base = generate_rewritten_prompt_batch(
+                    base_rewriter_client,
+                    batch_prompt_messages,
+                    max_tokens=rewriter_max_tokens
+                )
+            except Exception as e:
+                print(f"Error in batch rewriting (base) for batch {batch_start}-{batch_end}: {e}")
+                rewritten_prompts_base = [""] * len(batch_samples)
+            
+            # Batch inference for fine-tuned rewritten prompts
+            # Filter out empty prompts
+            valid_finetuned_prompts = []
+            valid_finetuned_indices = []
+            for idx, rp in enumerate(rewritten_prompts_finetuned):
+                if rp and rp.strip():
+                    valid_finetuned_prompts.append(rp)
+                    valid_finetuned_indices.append(idx)
+            
+            eval_outputs_finetuned = [""] * len(batch_samples)
+            if valid_finetuned_prompts:
+                try:
+                    # Use batch generation
+                    batch_outputs = inference_client.generate_batch(
+                        model_id=inference_model,
+                        prompts=valid_finetuned_prompts,
+                        max_new_tokens=inference_max_tokens,
+                        do_sample=False
+                    )
+                    for local_idx, global_idx in enumerate(valid_finetuned_indices):
+                        eval_outputs_finetuned[global_idx] = batch_outputs[local_idx]
+                except Exception as e:
+                    print(f"Error in batch inference (fine-tuned) for batch {batch_start}-{batch_end}: {e}")
+            
+            # Batch inference for base rewritten prompts
+            valid_base_prompts = []
+            valid_base_indices = []
+            for idx, rp in enumerate(rewritten_prompts_base):
+                if rp and rp.strip():
+                    valid_base_prompts.append(rp)
+                    valid_base_indices.append(idx)
+            
+            eval_outputs_base = [""] * len(batch_samples)
+            if valid_base_prompts:
+                try:
+                    # Use batch generation
+                    batch_outputs = inference_client.generate_batch(
+                        model_id=inference_model,
+                        prompts=valid_base_prompts,
+                        max_new_tokens=inference_max_tokens,
+                        do_sample=False
+                    )
+                    for local_idx, global_idx in enumerate(valid_base_indices):
+                        eval_outputs_base[global_idx] = batch_outputs[local_idx]
+                except Exception as e:
+                    print(f"Error in batch inference (base) for batch {batch_start}-{batch_end}: {e}")
+            
+            # Evaluate each sample in the batch
+            for batch_idx, (orig_idx, sample, prompt_messages) in enumerate(batch_samples):
+                original_user_prompt = None
+                for msg in prompt_messages:
+                    if isinstance(msg, dict) and msg.get("role") == "user":
+                        original_user_prompt = msg.get("content", "")
+                        break
+                
+                # Get results from batch processing
+                rewritten_prompt_finetuned = rewritten_prompts_finetuned[batch_idx]
+                rewritten_prompt_base = rewritten_prompts_base[batch_idx]
+                eval_output_finetuned = eval_outputs_finetuned[batch_idx]
+                eval_output_base = eval_outputs_base[batch_idx]
+                
+                # Evaluate outputs
+                try:
+                    reward_finetuned = _evaluate_solution(
+                        evaluator, eval_output_finetuned, sample, evaluator_type
+                    )
+                except Exception as e:
+                    reward_finetuned = 0.0
+                
+                try:
+                    reward_base = _evaluate_solution(
+                        evaluator, eval_output_base, sample, evaluator_type
+                    )
+                except Exception as e:
+                    reward_base = 0.0
+                
+                # Store results
+                result = {
+                    "sample_index": orig_idx,
+                    "original_prompt": original_user_prompt,
+                    "rewritten_prompt_finetuned": rewritten_prompt_finetuned,
+                    "rewritten_prompt_base": rewritten_prompt_base,
+                    "eval_output_finetuned": eval_output_finetuned,
+                    "eval_output_base": eval_output_base,
+                    "reward_finetuned": reward_finetuned,
+                    "reward_base": reward_base,
+                    "improvement": reward_finetuned - reward_base,
+                }
+                
+                # Include any additional fields from the sample
+                for key, value in sample.items():
+                    if key != "prompt" and key not in result:
+                        result[key] = value
+                
+                results.append(result)
+                
+                # Print summary every 50 samples
+                if len(results) % 50 == 0:
+                    _print_progress_summary(results)
+    else:
+        # Sequential processing (original code)
+        for i, sample in enumerate(tqdm(test_data, desc="Evaluating")):
+            # Extract prompt messages
+        prompt_messages = sample.get("prompt", [])
+         
         # Handle case where prompt_messages might be a string representation
         if isinstance(prompt_messages, str):
             try:
@@ -656,32 +915,9 @@ def run_evaluation(
         
         results.append(result)
         
-        # Print summary every 50 samples
-        if (i + 1) % 50 == 0:
-            current_rewards_finetuned = [r["reward_finetuned"] for r in results]
-            current_rewards_base = [r["reward_base"] for r in results]
-            current_improvements = [r["improvement"] for r in results]
-            
-            current_stats = {
-                "num_samples": len(results),
-                "mean_reward_finetuned": sum(current_rewards_finetuned) / len(current_rewards_finetuned) if current_rewards_finetuned else 0.0,
-                "mean_reward_base": sum(current_rewards_base) / len(current_rewards_base) if current_rewards_base else 0.0,
-                "mean_improvement": sum(current_improvements) / len(current_improvements) if current_improvements else 0.0,
-                "num_improved": sum(1 for imp in current_improvements if imp > 0),
-                "num_worse": sum(1 for imp in current_improvements if imp < 0),
-                "num_same": sum(1 for imp in current_improvements if imp == 0),
-            }
-            
-            print(f"\n{'='*60}")
-            print(f"Progress Update: {current_stats['num_samples']} samples completed")
-            print(f"{'='*60}")
-            print(f"Fine-tuned Rewriter - Mean reward: {current_stats['mean_reward_finetuned']:.4f}")
-            print(f"Base Rewriter        - Mean reward: {current_stats['mean_reward_base']:.4f}")
-            print(f"Mean improvement: {current_stats['mean_improvement']:.4f}")
-            print(f"Improved: {current_stats['num_improved']} ({100*current_stats['num_improved']/current_stats['num_samples']:.1f}%) | "
-                  f"Worse: {current_stats['num_worse']} ({100*current_stats['num_worse']/current_stats['num_samples']:.1f}%) | "
-                  f"Same: {current_stats['num_same']} ({100*current_stats['num_same']/current_stats['num_samples']:.1f}%)")
-            print(f"{'='*60}\n")
+            # Print summary every 50 samples
+            if (i + 1) % 50 == 0:
+                _print_progress_summary(results)
     
     # Calculate statistics
     print(f"\n7. Calculating final statistics...")
@@ -817,6 +1053,34 @@ def _evaluate_solution(
         return 0.0
 
 
+def _print_progress_summary(results: List[Dict[str, Any]]):
+    """Print a progress summary of current results."""
+    current_rewards_finetuned = [r["reward_finetuned"] for r in results]
+    current_rewards_base = [r["reward_base"] for r in results]
+    current_improvements = [r["improvement"] for r in results]
+    
+    current_stats = {
+        "num_samples": len(results),
+        "mean_reward_finetuned": sum(current_rewards_finetuned) / len(current_rewards_finetuned) if current_rewards_finetuned else 0.0,
+        "mean_reward_base": sum(current_rewards_base) / len(current_rewards_base) if current_rewards_base else 0.0,
+        "mean_improvement": sum(current_improvements) / len(current_improvements) if current_improvements else 0.0,
+        "num_improved": sum(1 for imp in current_improvements if imp > 0),
+        "num_worse": sum(1 for imp in current_improvements if imp < 0),
+        "num_same": sum(1 for imp in current_improvements if imp == 0),
+    }
+    
+    print(f"\n{'='*60}")
+    print(f"Progress Update: {current_stats['num_samples']} samples completed")
+    print(f"{'='*60}")
+    print(f"Fine-tuned Rewriter - Mean reward: {current_stats['mean_reward_finetuned']:.4f}")
+    print(f"Base Rewriter        - Mean reward: {current_stats['mean_reward_base']:.4f}")
+    print(f"Mean improvement: {current_stats['mean_improvement']:.4f}")
+    print(f"Improved: {current_stats['num_improved']} ({100*current_stats['num_improved']/current_stats['num_samples']:.1f}%) | "
+          f"Worse: {current_stats['num_worse']} ({100*current_stats['num_worse']/current_stats['num_samples']:.1f}%) | "
+          f"Same: {current_stats['num_same']} ({100*current_stats['num_same']/current_stats['num_samples']:.1f}%)")
+    print(f"{'='*60}\n")
+
+
 def _generate_with_inference_model(
     inference_client: HFClient,
     inference_model: str,
@@ -935,6 +1199,20 @@ def main():
         help="Maximum tokens for inference (task completion)"
     )
     
+    # Performance options
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=1,
+        help="Batch size for processing (1 = sequential, >1 = batched, much faster). Recommended: 4-16"
+    )
+    parser.add_argument(
+        "--num-gpus",
+        type=int,
+        default=1,
+        help="Number of GPUs to use (1 = single GPU, >1 = multi-GPU via DataParallel)"
+    )
+    
     # Evaluation options
     parser.add_argument(
         "--output-file",
@@ -966,6 +1244,8 @@ def main():
         dataset_name=args.dataset_name,
         rewriter_max_tokens=args.rewriter_max_tokens,
         inference_max_tokens=args.inference_max_tokens,
+        batch_size=args.batch_size,
+        num_gpus=args.num_gpus,
         output_file=args.output_file,
     )
     
