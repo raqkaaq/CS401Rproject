@@ -530,6 +530,9 @@ def run_evaluation(
     parser.download_dataset()
     test_data = parser.parse()
     
+    # Shuffle the data with a random seed for reproducibility (or use None for truly random)
+    # This ensures different runs can use different samples if desired
+    
     if num_test_samples:
         test_data = test_data[:num_test_samples]
     
@@ -656,13 +659,41 @@ def run_evaluation(
             
             # Batch rewrite with fine-tuned model
             try:
+                # Debug: Check if models have different generation configs
+                if batch_start == 0:
+                    finetuned_model = _get_model(finetuned_rewriter_client.model)
+                    base_model = _get_model(base_rewriter_client.model)
+                    if hasattr(finetuned_model, 'generation_config') and hasattr(base_model, 'generation_config'):
+                        finetuned_max_new_tokens = getattr(finetuned_model.generation_config, 'max_new_tokens', None)
+                        base_max_new_tokens = getattr(base_model.generation_config, 'max_new_tokens', None)
+                        if finetuned_max_new_tokens != base_max_new_tokens:
+                            print(f"Warning: Fine-tuned model generation_config.max_new_tokens={finetuned_max_new_tokens}, "
+                                  f"Base model generation_config.max_new_tokens={base_max_new_tokens}")
+                            print(f"  Using explicit max_tokens={rewriter_max_tokens} (this should override config)")
+                
                 rewritten_prompts_finetuned = generate_rewritten_prompt_batch(
                     finetuned_rewriter_client,
                     batch_prompt_messages,
                     max_tokens=rewriter_max_tokens
                 )
+                # Debug: Count empty outputs
+                empty_count = sum(1 for rp in rewritten_prompts_finetuned if not rp or not rp.strip())
+                if empty_count > 0:
+                    # Track which samples have empty outputs
+                    empty_indices = [batch_start + i for i, rp in enumerate(rewritten_prompts_finetuned) if not rp or not rp.strip()]
+                    if batch_start == 0 or len(results) % 50 == 0:
+                        print(f"Warning: Fine-tuned rewriter produced {empty_count}/{len(rewritten_prompts_finetuned)} empty outputs in batch {batch_start}-{batch_end}")
+                        if len(empty_indices) <= 5:
+                            print(f"  Empty output sample indices: {empty_indices}")
+                        else:
+                            print(f"  Empty output sample indices (first 5): {empty_indices[:5]}...")
+                    if empty_count == len(rewritten_prompts_finetuned):
+                        print(f"  All fine-tuned rewritten prompts are empty! Checking first sample...")
+                        print(f"  First rewritten prompt (length): {len(rewritten_prompts_finetuned[0]) if rewritten_prompts_finetuned else 0}")
             except Exception as e:
                 print(f"Error in batch rewriting (fine-tuned) for batch {batch_start}-{batch_end}: {e}")
+                import traceback
+                traceback.print_exc()
                 rewritten_prompts_finetuned = [""] * len(batch_samples)
             
             # Batch rewrite with base model
@@ -672,8 +703,14 @@ def run_evaluation(
                     batch_prompt_messages,
                     max_tokens=rewriter_max_tokens
                 )
+                # Debug: Count empty outputs
+                empty_count = sum(1 for rp in rewritten_prompts_base if not rp or not rp.strip())
+                if empty_count > 0 and batch_start == 0:
+                    print(f"Warning: Base rewriter produced {empty_count}/{len(rewritten_prompts_base)} empty outputs in first batch")
             except Exception as e:
                 print(f"Error in batch rewriting (base) for batch {batch_start}-{batch_end}: {e}")
+                import traceback
+                traceback.print_exc()
                 rewritten_prompts_base = [""] * len(batch_samples)
             
             # Batch inference for fine-tuned rewritten prompts
@@ -699,6 +736,12 @@ def run_evaluation(
                         eval_outputs_finetuned[global_idx] = batch_outputs[local_idx]
                 except Exception as e:
                     print(f"Error in batch inference (fine-tuned) for batch {batch_start}-{batch_end}: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                # All fine-tuned prompts were empty - log this for debugging
+                if batch_start == 0:
+                    print(f"Warning: All fine-tuned rewritten prompts were empty in first batch ({len(rewritten_prompts_finetuned)} samples)")
             
             # Batch inference for base rewritten prompts
             valid_base_prompts = []
@@ -743,6 +786,8 @@ def run_evaluation(
                         evaluator, eval_output_finetuned, sample, evaluator_type
                     )
                 except Exception as e:
+                    if batch_start == 0 and batch_idx == 0:
+                        print(f"Warning: Error evaluating fine-tuned output: {e}")
                     reward_finetuned = 0.0
                 
                 try:
@@ -750,7 +795,37 @@ def run_evaluation(
                         evaluator, eval_output_base, sample, evaluator_type
                     )
                 except Exception as e:
+                    if batch_start == 0 and batch_idx == 0:
+                        print(f"Warning: Error evaluating base output: {e}")
                     reward_base = 0.0
+                
+                # Track samples where fine-tuned fails but base succeeds (the "worse" cases)
+                if reward_finetuned < reward_base:
+                    # This is a "worse" case - fine-tuned got lower reward than base
+                    print(f"  [Sample {orig_idx}] Fine-tuned reward: {reward_finetuned:.4f} < Base reward: {reward_base:.4f}")
+                    print(f"    Fine-tuned rewritten prompt empty: {not rewritten_prompt_finetuned or not rewritten_prompt_finetuned.strip()}")
+                    print(f"    Base rewritten prompt empty: {not rewritten_prompt_base or not rewritten_prompt_base.strip()}")
+                    print(f"    Fine-tuned eval output length: {len(eval_output_finetuned)}")
+                    print(f"    Base eval output length: {len(eval_output_base)}")
+                
+                # Debug first sample in first batch
+                if batch_start == 0 and batch_idx == 0:
+                    print(f"\n=== DEBUG: First Sample ===")
+                    print(f"Fine-tuned rewritten prompt length: {len(rewritten_prompt_finetuned)}")
+                    print(f"Fine-tuned eval output length: {len(eval_output_finetuned)}")
+                    print(f"Fine-tuned reward: {reward_finetuned}")
+                    print(f"Base rewritten prompt length: {len(rewritten_prompt_base)}")
+                    print(f"Base eval output length: {len(eval_output_base)}")
+                    print(f"Base reward: {reward_base}")
+                    if rewritten_prompt_finetuned:
+                        print(f"Fine-tuned rewritten prompt (first 200 chars): {rewritten_prompt_finetuned[:200]}")
+                    if eval_output_finetuned:
+                        print(f"Fine-tuned eval output (first 200 chars): {eval_output_finetuned[:200]}")
+                    if rewritten_prompt_base:
+                        print(f"Base rewritten prompt (first 200 chars): {rewritten_prompt_base[:200]}")
+                    if eval_output_base:
+                        print(f"Base eval output (first 200 chars): {eval_output_base[:200]}")
+                    print(f"===========================\n")
                 
                 # Store results
                 result = {
@@ -775,6 +850,8 @@ def run_evaluation(
                 # Print summary every 50 samples
                 if len(results) % 50 == 0:
                     _print_progress_summary(results)
+                    # Additional diagnostics for the "2 per 50" pattern
+                    _print_diagnostic_summary(results[-50:])  # Last 50 samples
     else:
         # Sequential processing (original code)
         for i, sample in enumerate(tqdm(test_data, desc="Evaluating")):
@@ -1088,6 +1165,50 @@ def _print_progress_summary(results: List[Dict[str, Any]]):
           f"Worse: {current_stats['num_worse']} ({100*current_stats['num_worse']/current_stats['num_samples']:.1f}%) | "
           f"Same: {current_stats['num_same']} ({100*current_stats['num_same']/current_stats['num_samples']:.1f}%)")
     print(f"{'='*60}\n")
+
+
+def _print_diagnostic_summary(recent_results: List[Dict[str, Any]]):
+    """Print diagnostic information about the recent batch to identify patterns."""
+    if not recent_results:
+        return
+    
+    # Count empty outputs
+    empty_finetuned_prompts = sum(1 for r in recent_results if not r.get("rewritten_prompt_finetuned", "").strip())
+    empty_base_prompts = sum(1 for r in recent_results if not r.get("rewritten_prompt_base", "").strip())
+    empty_finetuned_outputs = sum(1 for r in recent_results if not r.get("eval_output_finetuned", "").strip())
+    empty_base_outputs = sum(1 for r in recent_results if not r.get("eval_output_base", "").strip())
+    
+    # Find "worse" cases (fine-tuned < base)
+    worse_cases = [r for r in recent_results if r.get("improvement", 0) < 0]
+    
+    print(f"\n--- Diagnostic Summary (Last {len(recent_results)} samples) ---")
+    print(f"Empty fine-tuned rewritten prompts: {empty_finetuned_prompts}/{len(recent_results)} ({100*empty_finetuned_prompts/len(recent_results):.1f}%)")
+    print(f"Empty base rewritten prompts: {empty_base_prompts}/{len(recent_results)} ({100*empty_base_prompts/len(recent_results):.1f}%)")
+    print(f"Empty fine-tuned eval outputs: {empty_finetuned_outputs}/{len(recent_results)} ({100*empty_finetuned_outputs/len(recent_results):.1f}%)")
+    print(f"Empty base eval outputs: {empty_base_outputs}/{len(recent_results)} ({100*empty_base_outputs/len(recent_results):.1f}%)")
+    print(f"Worse cases (fine-tuned < base): {len(worse_cases)}")
+    
+    if worse_cases:
+        print(f"\nSample indices with worse performance:")
+        for r in worse_cases[:5]:  # Show first 5
+            idx = r.get("sample_index", "?")
+            ft_reward = r.get("reward_finetuned", 0.0)
+            base_reward = r.get("reward_base", 0.0)
+            ft_prompt_empty = not r.get("rewritten_prompt_finetuned", "").strip()
+            base_prompt_empty = not r.get("rewritten_prompt_base", "").strip()
+            print(f"  Sample {idx}: FT={ft_reward:.4f}, Base={base_reward:.4f} | "
+                  f"FT_prompt_empty={ft_prompt_empty}, Base_prompt_empty={base_prompt_empty}")
+    
+    # Check if there's a pattern in sample indices
+    if len(worse_cases) >= 2:
+        worse_indices = [r.get("sample_index", -1) for r in worse_cases]
+        worse_indices.sort()
+        if len(worse_indices) >= 2:
+            gaps = [worse_indices[i+1] - worse_indices[i] for i in range(len(worse_indices)-1)]
+            print(f"\nGaps between worse-case sample indices: {gaps}")
+            if len(set(gaps)) == 1:
+                print(f"  → Consistent gap of {gaps[0]} detected! This suggests a pattern.")
+    print("--- End Diagnostic Summary ---\n")
 
 
 def _generate_with_inference_model(
