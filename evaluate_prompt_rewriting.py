@@ -818,13 +818,13 @@ def run_evaluation(
                     print(f"Base eval output length: {len(eval_output_base)}")
                     print(f"Base reward: {reward_base}")
                     if rewritten_prompt_finetuned:
-                        print(f"Fine-tuned rewritten prompt (first 200 chars): {rewritten_prompt_finetuned[:200]}")
+                        print(f"Fine-tuned rewritten prompt (first 200 chars):\n {rewritten_prompt_finetuned[:200]}")
                     if eval_output_finetuned:
-                        print(f"Fine-tuned eval output (first 200 chars): {eval_output_finetuned[:200]}")
+                        print(f"Fine-tuned eval output (first 200 chars):\n {eval_output_finetuned[:200]}")
                     if rewritten_prompt_base:
-                        print(f"Base rewritten prompt (first 200 chars): {rewritten_prompt_base[:200]}")
+                        print(f"Base rewritten prompt (first 200 chars):\n {rewritten_prompt_base[:200]}")
                     if eval_output_base:
-                        print(f"Base eval output (first 200 chars): {eval_output_base[:200]}")
+                        print(f"Base eval output (first 200 chars):\n {eval_output_base[:200]}")
                     print(f"===========================\n")
                 
                 # Store results

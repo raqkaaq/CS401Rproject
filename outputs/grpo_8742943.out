@@ -1,0 +1,7 @@
+Job ID: 8742943
+Job Name: grpo_training
+Node: m13h-1-2
+Start Time: Fri Nov 28 09:00:50 AM MST 2025
+Working Directory: /home/dmv29/CS401Rproject
+Python version: Python 3.12.2
+PyTorch version: 2.9.1+cu128
