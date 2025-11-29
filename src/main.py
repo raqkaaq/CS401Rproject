@@ -239,7 +239,7 @@ def main():
             model=args.evaluator_model,
             client=None,
             temperature=0.0,
-            max_tokens=64,
+            max_tokens=512,
             prefer_client=args.client_type
         )
     else:
