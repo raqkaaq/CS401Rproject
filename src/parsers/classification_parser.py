@@ -168,7 +168,11 @@ class ClassificationParser(BaseParser):
 
             prompt_messages = [
                 {
-                    "content": self.meta_prompt + "\n\n" + prompt_content,
+                    "content": self.meta_prompt,
+                    "role": "system"
+                },
+                {
+                    "content": prompt_content,
                     "role": "user"
                 }
             ]
