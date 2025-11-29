@@ -3,7 +3,7 @@ from collections import Counter
 from .base_evalator import BaseEvaluator
 
 class PoemEvaluator(BaseEvaluator):
-    def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 256,
+    def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 512,
                  prefer_client: str = "auto"):
         """
         Initialize the poem evaluator.
