@@ -170,6 +170,10 @@ accelerate launch --mixed_precision=bf16 src/main.py \
 #   --save-strategy no                        # Only save final model
 # Note: To save every N epochs, calculate steps: (dataset_size / batch_size) * N
 #       Then use: --save-strategy steps --save-steps <calculated_steps>
+#
+# Resuming from checkpoint:
+#   Option 1 (Auto-detect): Just run the same command - it will auto-detect the latest checkpoint
+#   Option 2 (Explicit): Add --resume-from-checkpoint <path> (e.g., ./trainer_output/checkpoint-450)
 
 # Print completion time
 echo "End Time: $(date)"

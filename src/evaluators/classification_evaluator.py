@@ -48,17 +48,22 @@ class ClassificationEvaluator(BaseEvaluator):
         last_30_chars = base_llm_output[-30:].lower()
         gold_label_lower = gold_label_str.strip().lower()
 
+        brevity_score = max(0, 1 - len(base_llm_output) / 128)
+        correctness_score = 0
+
         # Also attempt to grab text after Classificaiton:
         classification_text = re.search(r"Classification:\s*(.+)", base_llm_output)
         if classification_text:
             classification_text = classification_text.group(1).strip().lower()
             if gold_label_lower in classification_text:
-                return 1.0
+                correctness_score = 1
+                return (correctness_score * 0.7) + (brevity_score * 0.3)
             else:
                 return 0.0
         else:
             return 0.0
         if gold_label_lower in last_30_chars:
-            return 1.0
+            correctness_score = 1
+            return (correctness_score * 0.7) + (brevity_score * 0.3)
         else:
             return 0.0
