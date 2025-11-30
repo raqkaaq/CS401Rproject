@@ -153,6 +153,12 @@ def main():
         default=None,
         help="Path to checkpoint directory to resume from (e.g., './trainer_output/checkpoint-450'). If not specified, will auto-detect latest checkpoint in output_dir if training was interrupted."
     )
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=0.05,
+        help="KL penalty coefficient (beta) for controlling divergence from reference model. Default: 0.0 (no penalty). Typical values: 0.01-0.1. Higher values prevent policy from deviating too far from reference."
+    )
     
     args = parser.parse_args()
     
@@ -263,6 +269,7 @@ def main():
         "bf16": torch.cuda.is_available(),  # Enable bf16 only if GPU is available (H200/H100/A100 support bf16)
         # fp16=False,  # bf16 is preferred for newer GPUs
         "dataloader_pin_memory": torch.cuda.is_available(),  # Pin memory for faster GPU data transfer
+        "beta": args.beta,  # KL penalty coefficient
     }
     
     # Add token length limits if specified
@@ -272,6 +279,10 @@ def main():
     if args.max_prompt_length is not None:
         training_config_kwargs["max_prompt_length"] = args.max_prompt_length
         print(f"✓ Setting max_prompt_length={args.max_prompt_length} tokens")
+    if args.beta > 0.0:
+        print(f"✓ KL penalty (beta) enabled: {args.beta}")
+    else:
+        print(f"  KL penalty (beta) disabled: {args.beta} (no constraint on policy divergence)")
     
     training_config = GRPOConfig(**training_config_kwargs)
     

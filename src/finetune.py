@@ -32,10 +32,13 @@ class Finetune:
             parser: Parser instance that implements BaseParser interface
             evaluator: Evaluator instance that implements BaseEvaluator interface
             training_args: Optional GRPOConfig for training. If None, uses default config.
-                          To limit token generation during training, set:
+                          Common parameters:
                           - max_completion_length: Maximum tokens for generated completions (e.g., 256)
                           - max_prompt_length: Maximum tokens for input prompts (e.g., 512)
-                          Example: GRPOConfig(max_completion_length=256, max_prompt_length=512, ...)
+                          - beta: KL penalty coefficient for controlling divergence from reference model.
+                                  Default: 0.0 (no penalty). Typical values: 0.01-0.1.
+                                  Higher values prevent policy from deviating too far from reference.
+                          Example: GRPOConfig(max_completion_length=256, max_prompt_length=512, beta=0.02, ...)
         """
         self.model = model
         self.parser = parser

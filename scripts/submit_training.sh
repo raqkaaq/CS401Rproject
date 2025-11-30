@@ -153,7 +153,7 @@ accelerate launch --mixed_precision=bf16 src/main.py \
   --evaluator-type classification \
   --evaluator-model Qwen/Qwen2.5-0.5B-Instruct \
   --client-type hf \
-  --output-dir ./classification_output \
+  --output-dir ./one_hot_encoded_classification_output \
   --num-epochs 10 \
   --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements." \
   --learning-rate 5e-6 \
@@ -174,6 +174,14 @@ accelerate launch --mixed_precision=bf16 src/main.py \
 # Resuming from checkpoint:
 #   Option 1 (Auto-detect): Just run the same command - it will auto-detect the latest checkpoint
 #   Option 2 (Explicit): Add --resume-from-checkpoint <path> (e.g., ./trainer_output/checkpoint-450)
+#
+# KL Penalty (beta) - Controls divergence from reference model:
+#   --beta 0.0        # No KL penalty (default) - allows more aggressive policy updates
+#   --beta 0.01       # Light penalty - prevents small deviations
+#   --beta 0.02       # Moderate penalty (recommended starting point)
+#   --beta 0.05       # Strong penalty - keeps policy very close to reference
+#   --beta 0.1        # Very strong penalty - minimal policy changes
+#   Higher beta values = more stable training but potentially slower convergence
 
 # Print completion time
 echo "End Time: $(date)"
