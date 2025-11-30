@@ -3,8 +3,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=128G
-#SBATCH --time=24:00:00
+#SBATCH --mem=96G
+#SBATCH --time=36:00:00
 #SBATCH --output=grpo_%j.out
 #SBATCH --error=grpo_%j.err
 
@@ -149,19 +149,19 @@ echo "Working directory: $(pwd)"
 # Explicitly set mixed precision to bf16 for GPU training (H200/H100/A100 support bf16)
 accelerate launch --mixed_precision=bf16 src/main.py \
   --model Qwen/Qwen2.5-0.5B-Instruct \
-  --parser-type classification \
-  --evaluator-type classification \
-  --evaluator-model Qwen/Qwen2.5-0.5B-Instruct \
+  --parser-type math \
+  --evaluator-type math \
+  --evaluator-model Qwen/Qwen2.5-7B-Instruct \
   --client-type hf \
-  --output-dir ./new_classification_output \
+  --output-dir ./new_math_output \
   --num-epochs 10 \
   --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements." \
   --learning-rate 5e-6 \
   --batch-size 32 \
   --num-samples 5000 \
   --save-steps 25 \
-  --max-prompt-length 256 \
-  --max-completion-length 512 \
+  --max-prompt-length 5012 \
+  --max-completion-length 5012 \
   --save-strategy steps \
   --logging-steps 10
 # Save options:

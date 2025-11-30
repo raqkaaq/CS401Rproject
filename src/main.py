@@ -229,7 +229,7 @@ def main():
             model=args.evaluator_model,
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
-            max_tokens=512,  # Reduced from 5012 for faster evaluation (math problems rarely need more)
+            max_tokens=5012,
             prefer_client=args.client_type
         )
     elif args.evaluator_type == "poem":
