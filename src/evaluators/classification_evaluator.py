@@ -14,22 +14,38 @@ class ClassificationEvaluator(BaseEvaluator):
         Initialize the classification evaluator.
         """
         super().__init__(model, client, temperature, max_tokens, prefer_client=prefer_client)
+    
+    def length_evaluation(self, base_llm_output: str) -> float:
+        """
+        Evaluate the length of the classification output.
+        """
+        brevity_score = max(0.0, 1.0 - len(base_llm_output) / 128)
+        if brevity_score == 0.0:
+            brevity_score = max(-1.0, -len(base_llm_output) / 1024)
+        return brevity_score
+    
     def evaluate(self, base_llm_output: str, **kwargs) -> float:
         """
         Evaluate the classification output.
+        Returns a single combined score (correctness * 0.7 + length * 0.3).
         """
         label = kwargs.get("label", None)
+        correctness_score = 0.0
         
         # Handle both single value and list cases (defensive programming)
         if isinstance(label, list):
             if len(label) > 0:
                 gold_label = int(label[0])
             else:
-                return 0.0
+                correctness_score = 0.0
+                length_score = self.length_evaluation(base_llm_output)
+                return (correctness_score * 0.7) + (length_score * 0.3)
         elif label is not None:
             gold_label = int(label)
         else:
-            return 0.0
+            correctness_score = 0.0
+            length_score = self.length_evaluation(base_llm_output)
+            return (correctness_score * 0.7) + (length_score * 0.3)
         
         base_llm_output = base_llm_output.strip()
         matching_case = {
@@ -42,28 +58,29 @@ class ClassificationEvaluator(BaseEvaluator):
         if gold_label in matching_case:
             gold_label_str = matching_case[gold_label]
         else:
-            return 0.0
+            correctness_score = 0.0
+            length_score = self.length_evaluation(base_llm_output)
+            return (correctness_score * 0.7) + (length_score * 0.3)
 
         # Check if the answer is in the last 30 characters
         last_30_chars = base_llm_output[-30:].lower()
         gold_label_lower = gold_label_str.strip().lower()
 
-        brevity_score = max(0, 1 - len(base_llm_output) / 128)
-        correctness_score = 0
-
-        # Also attempt to grab text after Classificaiton:
+        # Also attempt to grab text after Classification:
         classification_text = re.search(r"Classification:\s*(.+)", base_llm_output)
         if classification_text:
             classification_text = classification_text.group(1).strip().lower()
             if gold_label_lower in classification_text:
-                correctness_score = 1
-                return (correctness_score * 0.7) + (brevity_score * 0.3)
+                correctness_score = 1.0
             else:
-                return 0.0
+                correctness_score = 0.0
         else:
-            return 0.0
+            correctness_score = 0.0
+        
+        # Also check last 30 characters
         if gold_label_lower in last_30_chars:
-            correctness_score = 1
-            return (correctness_score * 0.7) + (brevity_score * 0.3)
-        else:
-            return 0.0
+            correctness_score = 1.0
+        
+        length_score = self.length_evaluation(base_llm_output)
+        # Return a single combined score (not a list)
+        return (correctness_score * 0.7) + (length_score * 0.3)
