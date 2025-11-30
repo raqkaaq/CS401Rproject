@@ -153,7 +153,7 @@ accelerate launch --mixed_precision=bf16 src/main.py \
   --evaluator-type classification \
   --evaluator-model Qwen/Qwen2.5-0.5B-Instruct \
   --client-type hf \
-  --output-dir ./one_hot_encoded_classification_output \
+  --output-dir ./new_classification_output \
   --num-epochs 10 \
   --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements." \
   --learning-rate 5e-6 \
