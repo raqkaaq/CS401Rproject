@@ -20,8 +20,6 @@ class ClassificationEvaluator(BaseEvaluator):
         Evaluate the length of the classification output.
         """
         brevity_score = max(0.0, 1.0 - len(base_llm_output) / 128)
-        if brevity_score == 0.0:
-            brevity_score = max(-1.0, -len(base_llm_output) / 1024)
         return brevity_score
     
     def evaluate(self, base_llm_output: str, **kwargs) -> float:
