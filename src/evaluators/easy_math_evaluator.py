@@ -62,7 +62,7 @@ class EasyMathEvaluator(BaseEvaluator):
         """
         # Get the solution/answer from kwargs (parser provides "solution" field)
         solution = kwargs.get("solution", kwargs.get("solution", None))
-                prompt_strings = []
+        prompt_strings = []
         for rewritten_prompt in rewritten_prompts:
             # Handle both string format and list-of-dicts format
             if isinstance(rewritten_prompt, str):
