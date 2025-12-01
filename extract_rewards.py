@@ -33,7 +33,7 @@ def extract_reward_arrays_from_file(file_path):
 
 def main():
     # Input file
-    input_file = Path('outputs/math.out')
+    input_file = Path('outputs/grpo_8766796.out')
     
     # Extract all reward arrays
     print(f"Extracting reward arrays from {input_file}...")
@@ -41,7 +41,7 @@ def main():
     print(f"Found {len(all_reward_arrays)} total reward arrays")
     
     # Extract every 4th array (1-indexed: 1st, 5th, 9th, etc. = indices 0, 4, 8, ...)
-    every_4th_array = all_reward_arrays[::4]
+    every_4th_array = all_reward_arrays
     print(f"Extracted {len(every_4th_array)} arrays (every 4th array)")
     
     # Calculate total rewards in the extracted arrays
@@ -49,7 +49,7 @@ def main():
     print(f"Total rewards in extracted arrays: {total_rewards}")
     
     # Save to JSON
-    output_file = Path('outputs/math_rewards.json')
+    output_file = Path('outputs/middle_new_math_rewards.json')
     with open(output_file, 'w') as f:
         json.dump(every_4th_array, f, indent=2)
     
