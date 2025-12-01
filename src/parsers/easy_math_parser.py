@@ -221,7 +221,9 @@ class EasyMathParser(BaseParser):
             solution_number = None
             solution_match = re.search(r'####\s*(\d+(?:\.\d+)?)', answer)
             if solution_match:
-                solution_number = solution_match.group(1)
+                # Wrap numeric solution in \boxed{} for proper LaTeX parsing by accuracy_reward
+                # This ensures math_verify can parse and verify the solution correctly
+                solution_number = f"\\boxed{{{solution_match.group(1)}}}"
 
             # Build prompt messages with optional meta prompt
             if self.meta_prompt:
