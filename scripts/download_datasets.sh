@@ -43,7 +43,11 @@ cache_dir = os.environ.get('HF_DATASETS_CACHE', os.path.expanduser('~/.cache/hug
 
 print(f'  Loading {dataset_name}...')
 try:
-    dataset = load_dataset(dataset_name, split=split)
+    # GSM8K requires a config name ('main' or 'socratic')
+    if dataset_name == "openai/gsm8k":
+        dataset = load_dataset(dataset_name, "main", split=split)
+    else:
+        dataset = load_dataset(dataset_name, split=split)
     print(f'  ✓ Downloaded {dataset_name}')
     print(f'  Samples: {len(dataset)}')
     print(f'  Cached in: {cache_dir}')

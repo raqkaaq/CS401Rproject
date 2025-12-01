@@ -61,6 +61,5 @@ class EasyMathEvaluator(BaseEvaluator):
             List of reward scores (floats).
         """
         # Get the solution/answer from kwargs (parser provides "solution" field)
-        solution = kwargs.get("solution", kwargs.get("answer", None))
-
+        solution = kwargs.get("solution", kwargs.get("solution", None))
         rewards = accuracy_reward(formatted_completions, solution)

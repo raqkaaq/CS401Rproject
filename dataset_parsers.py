@@ -26,7 +26,11 @@ class BaseDatasetParser:
             base, config = self.dataset_name.split(":")
             self.raw = load_dataset(base, config)
         else:
-            self.raw = load_dataset(self.dataset_name)
+            # GSM8K requires a config name ('main' or 'socratic')
+            if self.dataset_name == "openai/gsm8k":
+                self.raw = load_dataset(self.dataset_name, "main")
+            else:
+                self.raw = load_dataset(self.dataset_name)
         return self.raw
 
     # ----- override points -----

@@ -56,20 +56,44 @@ class EasyMathParser(BaseParser):
         try:
             # Load the dataset - GSM8K has "train" and "test" splits
             # We'll use "train" by default, but the split can be specified in dataset_name
+            # GSM8K requires a config name ('main' or 'socratic')
             if ":" in self.dataset_name:
-                base_name, split = self.dataset_name.split(":", 1)
-                self.dataset = load_dataset(
-                    base_name,
-                    split=split,
-                    download_mode="reuse_cache_if_exists"
-                )
+                parts = self.dataset_name.split(":", 1)
+                if len(parts) == 2:
+                    base_name, split = parts
+                    # Check if base_name is gsm8k and needs config
+                    if base_name == "openai/gsm8k":
+                        self.dataset = load_dataset(
+                            base_name,
+                            "main",
+                            split=split,
+                            download_mode="reuse_cache_if_exists"
+                        )
+                    else:
+                        self.dataset = load_dataset(
+                            base_name,
+                            split=split,
+                            download_mode="reuse_cache_if_exists"
+                        )
+                else:
+                    # Format: dataset:config:split or just dataset:config
+                    raise ValueError(f"Invalid dataset_name format: {self.dataset_name}")
             else:
                 # Default to train split
-                self.dataset = load_dataset(
-                    dataset_name,
-                    split="train",
-                    download_mode="reuse_cache_if_exists"
-                )
+                # Check if it's gsm8k and needs config
+                if dataset_name == "openai/gsm8k":
+                    self.dataset = load_dataset(
+                        dataset_name,
+                        "main",
+                        split="train",
+                        download_mode="reuse_cache_if_exists"
+                    )
+                else:
+                    self.dataset = load_dataset(
+                        dataset_name,
+                        split="train",
+                        download_mode="reuse_cache_if_exists"
+                    )
             print(f"✓ Loaded dataset: {len(self.dataset)} samples")
         except Exception as e:
             error_str = str(e)
@@ -91,20 +115,42 @@ class EasyMathParser(BaseParser):
                     # Try loading with trust_local_files
                     try:
                         if ":" in self.dataset_name:
-                            base_name, split = self.dataset_name.split(":", 1)
-                            self.dataset = load_dataset(
-                                base_name,
-                                split=split,
-                                trust_remote_code=True,
-                                download_mode="reuse_cache_if_exists"
-                            )
+                            parts = self.dataset_name.split(":", 1)
+                            if len(parts) == 2:
+                                base_name, split = parts
+                                # Check if base_name is gsm8k and needs config
+                                if base_name == "openai/gsm8k":
+                                    self.dataset = load_dataset(
+                                        base_name,
+                                        "main",
+                                        split=split,
+                                        trust_remote_code=True,
+                                        download_mode="reuse_cache_if_exists"
+                                    )
+                                else:
+                                    self.dataset = load_dataset(
+                                        base_name,
+                                        split=split,
+                                        trust_remote_code=True,
+                                        download_mode="reuse_cache_if_exists"
+                                    )
                         else:
-                            self.dataset = load_dataset(
-                                dataset_name,
-                                split="train",
-                                trust_remote_code=True,
-                                download_mode="reuse_cache_if_exists"
-                            )
+                            # Check if it's gsm8k and needs config
+                            if dataset_name == "openai/gsm8k":
+                                self.dataset = load_dataset(
+                                    dataset_name,
+                                    "main",
+                                    split="train",
+                                    trust_remote_code=True,
+                                    download_mode="reuse_cache_if_exists"
+                                )
+                            else:
+                                self.dataset = load_dataset(
+                                    dataset_name,
+                                    split="train",
+                                    trust_remote_code=True,
+                                    download_mode="reuse_cache_if_exists"
+                                )
                         print(f"✓ Loaded from cache: {len(self.dataset)} samples")
                         return
                     except:
