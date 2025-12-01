@@ -228,7 +228,7 @@ def main():
             model=args.evaluator_model,
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
-            max_tokens=args.max_prompt_length,
+            max_tokens=int(args.max_prompt_length),
             test_mode=args.test_mode,
             prefer_client=args.client_type
         )
@@ -237,7 +237,7 @@ def main():
             model=args.evaluator_model,
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
-            max_tokens=args.max_prompt_length,
+            max_tokens=int(args.max_prompt_length),
             prefer_client=args.client_type
         )
     elif args.evaluator_type == "easy_math":
@@ -245,7 +245,7 @@ def main():
             model=args.evaluator_model,
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
-            max_tokens=args.max_prompt_length,
+            max_tokens=int(args.max_prompt_length),
             prefer_client=args.client_type
         )
     elif args.evaluator_type == "poem":
@@ -253,7 +253,7 @@ def main():
             model=args.evaluator_model,
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
-            max_tokens=args.max_prompt_length,
+            max_tokens=int(args.max_prompt_length),
             prefer_client=args.client_type
         )
     elif args.evaluator_type == "classification":
@@ -261,7 +261,7 @@ def main():
             model=args.evaluator_model,
             client=None,
             temperature=0.0,
-            max_tokens=args.max_prompt_length,
+            max_tokens=int(args.max_prompt_length),
             prefer_client=args.client_type
         )
     else:
