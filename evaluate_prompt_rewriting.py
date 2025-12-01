@@ -73,9 +73,11 @@ from src.inference import HFClient
 from src.parsers.test_parser import TestParser
 from src.parsers.math_parser import MathParser
 from src.parsers.poem_parser import PoemParser
+from src.parsers.easy_math_parser import EasyMathParser
 from src.evaluators.test_evaluator import TestEvaluator
 from src.evaluators.math_evaluator import MathEvaluator
 from src.evaluators.poem_evaluator import PoemEvaluator
+from src.evaluators.easy_math_evaluator import EasyMathEvaluator
 from trl.rewards import accuracy_reward
 
 
@@ -518,6 +520,12 @@ def run_evaluation(
             meta_prompt=meta_prompt,
             num_samples=num_test_samples or 100
         )
+    elif parser_type == "easy_math":
+        parser = EasyMathParser(
+            dataset_name=dataset_name or "easy_math_dataset",
+            meta_prompt=meta_prompt,
+            num_samples=num_test_samples or 100
+        )
     elif parser_type == "poem":
         parser = PoemParser(
             dataset_name=dataset_name or "poem_dataset",
@@ -589,6 +597,14 @@ def run_evaluation(
         )
     elif evaluator_type == "math":
         evaluator = MathEvaluator(
+            model=inference_model,
+            client=inference_client,
+            temperature=0.0,
+            max_tokens=inference_max_tokens,
+            prefer_client="hf"
+        )
+    elif evaluator_type == "easy_math":
+        evaluator = EasyMathEvaluator(
             model=inference_model,
             client=inference_client,
             temperature=0.0,
@@ -1285,7 +1301,7 @@ def main():
         "--parser-type",
         type=str,
         default="test",
-        choices=["test", "math", "poem"],
+        choices=["test", "math", "poem", "easy_math"],
         help="Type of parser to use for loading test data"
     )
     parser.add_argument(
@@ -1312,7 +1328,7 @@ def main():
         "--evaluator-type",
         type=str,
         default="test",
-        choices=["test", "math", "poem"],
+        choices=["test", "math", "poem", "easy_math"],
         help="Type of evaluator to use for scoring"
     )
     
