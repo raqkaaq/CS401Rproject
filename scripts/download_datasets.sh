@@ -36,16 +36,17 @@ download_dataset() {
     python -c "
 from datasets import load_dataset
 import os
+import sys
 
-dataset_name = '$dataset_name'
-split = '$split'
+dataset_name = sys.argv[1]
+split = sys.argv[2]
 cache_dir = os.environ.get('HF_DATASETS_CACHE', os.path.expanduser('~/.cache/huggingface/datasets'))
 
 print(f'  Loading {dataset_name}...')
 try:
     # GSM8K requires a config name ('main' or 'socratic')
-    if dataset_name == "openai/gsm8k":
-        dataset = load_dataset(dataset_name, "main", split=split)
+    if dataset_name == 'openai/gsm8k':
+        dataset = load_dataset(dataset_name, 'main', split=split)
     else:
         dataset = load_dataset(dataset_name, split=split)
     print(f'  ✓ Downloaded {dataset_name}')
@@ -54,7 +55,7 @@ try:
 except Exception as e:
     print(f'  ✗ Failed to download {dataset_name}: {e}')
     raise
-"
+" "$dataset_name" "$split"
     
     if [ $? -eq 0 ]; then
         echo "  ✓ Successfully downloaded $dataset_name"
