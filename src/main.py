@@ -299,7 +299,6 @@ def main():
         "save_strategy": args.save_strategy,
         "save_steps": args.save_steps,  # Required parameter, but only used when save_strategy='steps'
         "bf16": torch.cuda.is_available(),  # Enable bf16 only if GPU is available (H200/H100/A100 support bf16)
-        # fp16=False,  # bf16 is preferred for newer GPUs
         "dataloader_pin_memory": torch.cuda.is_available(),  # Pin memory for faster GPU data transfer
         "beta": args.beta,  # KL penalty coefficient
         # Memory optimizations
