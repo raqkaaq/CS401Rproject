@@ -92,7 +92,8 @@ export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
 # Memory and performance settings
-export PYTORCH_ALLOC_CONF=max_split_size_mb:512
+# Use expandable_segments to reduce memory fragmentation (recommended by PyTorch for large models)
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Enable better error reporting
 set -e  # Exit on error
@@ -157,7 +158,7 @@ accelerate launch --mixed_precision=bf16 src/main.py \
   --num-epochs 10 \
   --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements." \
   --learning-rate 5e-6 \
-  --batch-size 32 \
+  --batch-size 8 \
   --num-samples 5000 \
   --save-steps 25 \
   --max-prompt-length 5012 \
