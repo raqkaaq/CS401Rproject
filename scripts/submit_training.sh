@@ -156,7 +156,7 @@ accelerate launch --mixed_precision=bf16 src/main.py \
   --client-type hf \
   --output-dir ./easy_math_output \
   --num-epochs 10 \
-  --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Add instructions which would be helpful to solve the problem correctly. Output the new instruction only, and do not provide a solution." \
+  --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Add instructions which would be helpful to solve the problem correctly, ensure you tell the model to put the solution at the end of its response in latex format. Output the new instruction only, and do not provide a solution." \
   --learning-rate 5e-6 \
   --batch-size 8 \
   --num-samples 5000 \
