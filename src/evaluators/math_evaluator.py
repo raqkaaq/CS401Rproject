@@ -71,7 +71,8 @@ class MathEvaluator(BaseEvaluator):
         rewards = []
         for i in range(len(formatted_completions)):
             # Check if the solution is in the last 50 characters
-            if solution in base_llm_outputs[i][-50:]:
+            base_llm_half_size = len(base_llm_outputs[i]) // 2
+            if solution in base_llm_outputs[i][base_llm_half_size:]:
                 rewards.append(1.0)
             else:
                 rewards.append(0.0)
