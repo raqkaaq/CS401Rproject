@@ -86,6 +86,11 @@ def main():
         help="Client type preference: 'auto' (try Ollama, fallback to HF), 'ollama' (force Ollama), 'hf' (force HF)"
     )
     parser.add_argument(
+        "--evaluator-8bit",
+        action="store_true",
+        help="Use 8-bit quantization for evaluator model to reduce memory usage (recommended when training large models)"
+    )
+    parser.add_argument(
         "--test-mode",
         type=str,
         default="length",
@@ -117,6 +122,12 @@ def main():
         type=int,
         default=8,
         help="Batch size"
+    )
+    parser.add_argument(
+        "--gradient-accumulation-steps",
+        type=int,
+        default=1,
+        help="Number of gradient accumulation steps (effective batch size = batch_size * gradient_accumulation_steps)"
     )
     parser.add_argument(
         "--save-steps",
@@ -230,7 +241,8 @@ def main():
             temperature=0.0,
             max_tokens=int(args.max_prompt_length),
             test_mode=args.test_mode,
-            prefer_client=args.client_type
+            prefer_client=args.client_type,
+            evaluator_8bit=args.evaluator_8bit
         )
     elif args.evaluator_type == "math": 
         evaluator_instance = MathEvaluator(
@@ -238,7 +250,8 @@ def main():
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
             max_tokens=int(args.max_prompt_length),
-            prefer_client=args.client_type
+            prefer_client=args.client_type,
+            evaluator_8bit=args.evaluator_8bit
         )
     elif args.evaluator_type == "easy_math":
         evaluator_instance = EasyMathEvaluator(
@@ -246,7 +259,8 @@ def main():
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
             max_tokens=int(args.max_prompt_length),
-            prefer_client=args.client_type
+            prefer_client=args.client_type,
+            evaluator_8bit=args.evaluator_8bit
         )
     elif args.evaluator_type == "poem":
         evaluator_instance = PoemEvaluator(
@@ -254,7 +268,8 @@ def main():
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
             max_tokens=int(args.max_prompt_length),
-            prefer_client=args.client_type
+            prefer_client=args.client_type,
+            evaluator_8bit=args.evaluator_8bit
         )
     elif args.evaluator_type == "classification":
         evaluator_instance = ClassificationEvaluator(
@@ -262,7 +277,8 @@ def main():
             client=None,
             temperature=0.0,
             max_tokens=int(args.max_prompt_length),
-            prefer_client=args.client_type
+            prefer_client=args.client_type,
+            evaluator_8bit=args.evaluator_8bit
         )
     else:
         raise ValueError(f"Unknown evaluator type: {args.evaluator_type}")
@@ -286,6 +302,9 @@ def main():
         # fp16=False,  # bf16 is preferred for newer GPUs
         "dataloader_pin_memory": torch.cuda.is_available(),  # Pin memory for faster GPU data transfer
         "beta": args.beta,  # KL penalty coefficient
+        # Memory optimizations
+        "gradient_checkpointing": True,  # Trade compute for memory (reduces memory usage significantly)
+        "gradient_accumulation_steps": args.gradient_accumulation_steps,  # Accumulate gradients to reduce memory usage
     }
     
     # Add token length limits if specified

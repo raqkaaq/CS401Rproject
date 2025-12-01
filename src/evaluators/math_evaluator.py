@@ -9,7 +9,7 @@ class MathEvaluator(BaseEvaluator):
     """
     
     def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 256,
-                 prefer_client: str = "auto"):
+                 prefer_client: str = "auto", evaluator_8bit: bool = False):
         """
         Initialize the math evaluator.
         
@@ -19,8 +19,9 @@ class MathEvaluator(BaseEvaluator):
             temperature: Temperature for generation
             max_tokens: Maximum tokens for generation
             prefer_client: Client preference ("auto", "ollama", or "hf")
+            evaluator_8bit: If True, use 8-bit quantization for HFClient (reduces memory usage)
         """
-        super().__init__(model, client, temperature, max_tokens, prefer_client=prefer_client)
+        super().__init__(model, client, temperature, max_tokens, prefer_client=prefer_client, evaluator_8bit=evaluator_8bit)
 
     def evaluate(self, base_llm_output: str, **kwargs) -> float:
         """

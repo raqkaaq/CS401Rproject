@@ -10,7 +10,7 @@ class TestEvaluator(BaseEvaluator):
     """
     
     def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 256, 
-                 test_mode: str = "length", prefer_client: str = "auto"):
+                 test_mode: str = "length", prefer_client: str = "auto", evaluator_8bit: bool = False):
         """
         Initialize the test evaluator.
         
@@ -24,8 +24,9 @@ class TestEvaluator(BaseEvaluator):
                 - "constant": Returns a constant score (default 0.5)
                 - "gold_match": Compares with gold answer if provided in kwargs
             prefer_client: Client preference ("auto", "ollama", or "hf")
+            evaluator_8bit: If True, use 8-bit quantization for HFClient (reduces memory usage)
         """
-        super().__init__(model, client, temperature, max_tokens, prefer_client=prefer_client)
+        super().__init__(model, client, temperature, max_tokens, prefer_client=prefer_client, evaluator_8bit=evaluator_8bit)
         self.test_mode = test_mode
     
     def evaluate(self, base_llm_output: str, **kwargs) -> float:

@@ -93,7 +93,7 @@ export TRANSFORMERS_OFFLINE=1
 
 # Memory and performance settings
 # Use expandable_segments to reduce memory fragmentation (recommended by PyTorch for large models)
-export PYTORCH_ALLOC_CONF=expandable_segments:True
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Enable better error reporting
 set -e  # Exit on error

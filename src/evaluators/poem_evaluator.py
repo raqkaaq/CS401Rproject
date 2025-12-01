@@ -5,7 +5,7 @@ from .base_evalator import BaseEvaluator
 
 class PoemEvaluator(BaseEvaluator):
     def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 512,
-                 prefer_client: str = "auto"):
+                 prefer_client: str = "auto", evaluator_8bit: bool = False):
         """
         Initialize the poem evaluator.
         
@@ -15,8 +15,9 @@ class PoemEvaluator(BaseEvaluator):
             temperature: Temperature for generation
             max_tokens: Maximum tokens for generation
             prefer_client: Client preference ("auto", "ollama", or "hf")
+            evaluator_8bit: If True, use 8-bit quantization for HFClient (reduces memory usage)
         """
-        super().__init__(model, client, temperature, max_tokens, prefer_client=prefer_client)
+        super().__init__(model, client, temperature, max_tokens, prefer_client=prefer_client, evaluator_8bit=evaluator_8bit)
 
     def rhyme_density_score(self, rhyme_scheme: str) -> float:
         if not rhyme_scheme:

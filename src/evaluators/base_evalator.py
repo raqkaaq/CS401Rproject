@@ -6,7 +6,7 @@ import torch
 
 class BaseEvaluator(ABC):
     def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 512, 
-                 prefer_client: str = "auto"):
+                 prefer_client: str = "auto", evaluator_8bit: bool = False):
         """
         Initialize the BaseEvaluator.
         
@@ -19,6 +19,7 @@ class BaseEvaluator(ABC):
                 - "auto": Try Ollama first, fall back to HFClient if unavailable
                 - "ollama": Force OllamaClient (will raise error if unavailable)
                 - "hf": Force HFClient
+            evaluator_8bit: If True, use 8-bit quantization for HFClient (reduces memory usage)
         """
         self.model = model
         self.temperature = temperature
@@ -34,7 +35,9 @@ class BaseEvaluator(ABC):
                 torch_dtype = "bf16" if torch.cuda.is_available() else None
                 if torch_dtype:
                     print(f"  Using {torch_dtype} precision for GPU inference")
-                self.client = HFClient(torch_dtype=torch_dtype)
+                if evaluator_8bit:
+                    print("  Using 8-bit quantization for evaluator model (reduces memory usage)")
+                self.client = HFClient(torch_dtype=torch_dtype, load_in_8bit=evaluator_8bit)
                 self.client.warmup_model(self.model)
             elif prefer_client == "ollama":
                 # Force OllamaClient
@@ -57,7 +60,9 @@ class BaseEvaluator(ABC):
                     torch_dtype = "bf16" if torch.cuda.is_available() else None
                     if torch_dtype:
                         print(f"  Using {torch_dtype} precision for GPU inference")
-                    self.client = HFClient(torch_dtype=torch_dtype)
+                    if evaluator_8bit:
+                        print("  Using 8-bit quantization for evaluator model (reduces memory usage)")
+                    self.client = HFClient(torch_dtype=torch_dtype, load_in_8bit=evaluator_8bit)
                     self.client.warmup_model(self.model)
         else:
             self.client = client
