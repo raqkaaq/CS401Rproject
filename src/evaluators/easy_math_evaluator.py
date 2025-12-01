@@ -62,4 +62,5 @@ class EasyMathEvaluator(BaseEvaluator):
         """
         # Get the solution/answer from kwargs (parser provides "solution" field)
         solution = kwargs.get("solution", kwargs.get("answer", None))
-        return 0.0
+
+        rewards = accuracy_reward(formatted_completions, solution)

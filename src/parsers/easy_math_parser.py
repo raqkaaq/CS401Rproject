@@ -1,4 +1,5 @@
 from typing import List, Dict, Any, Optional
+import re
 from .base_parser import BaseParser
 from datasets import load_dataset
 
@@ -170,6 +171,12 @@ class EasyMathParser(BaseParser):
             question = str(sample.get("question", ""))
             answer = str(sample.get("answer", ""))
 
+            # Extract solution number using regex to find "####" followed by a number
+            solution_number = None
+            solution_match = re.search(r'####\s*(\d+(?:\.\d+)?)', answer)
+            if solution_match:
+                solution_number = solution_match.group(1)
+
             # Build prompt messages with optional meta prompt
             if self.meta_prompt:
                 prompt_messages = [
@@ -194,7 +201,7 @@ class EasyMathParser(BaseParser):
                 "prompt": prompt_messages,
                 "original_question": question,
                 "answer": answer,
-                "solution": answer
+                "solution": solution_number if solution_number else answer
             }
             
             # Include other fields from the original sample if they exist
