@@ -68,6 +68,7 @@ echo "Downloading training and evaluation models..."
 download_model "Qwen/Qwen2.5-0.5B-Instruct"
 download_model "Qwen/Qwen2.5-7B-Instruct"
 download_model "Qwen/Qwen2.5-14B-Instruct"
+download_model "Qwen/Qwen3-4B-Instruct-2507"
 
 # For testing with smaller models
 # download_model "Qwen/Qwen2.5-0.5B-Instruct"
