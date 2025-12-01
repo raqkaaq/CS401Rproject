@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=96G
+#SBATCH --mem=128G
 #SBATCH --time=36:00:00
 #SBATCH --output=grpo_%j.out
 #SBATCH --error=grpo_%j.err
@@ -93,7 +93,7 @@ export TRANSFORMERS_OFFLINE=1
 
 # Memory and performance settings
 # Use expandable_segments to reduce memory fragmentation (recommended by PyTorch for large models)
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export PYTORCH_ALLOC_CONF=expandable_segments:True
 
 # Enable better error reporting
 set -e  # Exit on error
@@ -149,7 +149,7 @@ echo "Working directory: $(pwd)"
 # For single GPU, accelerate auto-detects. For multi-GPU, configure with: accelerate config
 # Explicitly set mixed precision to bf16 for GPU training (H200/H100/A100 support bf16)
 accelerate launch --mixed_precision=bf16 src/main.py \
-  --model Qwen/Qwen2.5-0.5B-Instruct \
+  --model Qwen/Qwen2.5-7B-Instruct \
   --parser-type easy_math \
   --evaluator-type easy_math \
   --evaluator-model Qwen/Qwen2.5-0.5B-Instruct \

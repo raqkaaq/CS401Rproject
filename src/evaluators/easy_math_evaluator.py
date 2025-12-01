@@ -81,3 +81,5 @@ class EasyMathEvaluator(BaseEvaluator):
         base_llm_outputs = self.pass_to_inference_batch(prompt_strings, **filtered_kwargs)
         formatted_completions = [[{"content": output}] for output in base_llm_outputs]
         rewards = accuracy_reward(formatted_completions, solution)
+        print("Rewards: ", rewards)
+        return rewards
