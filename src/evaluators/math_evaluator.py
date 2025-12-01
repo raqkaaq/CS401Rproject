@@ -67,6 +67,12 @@ class MathEvaluator(BaseEvaluator):
         # Format completions for accuracy_reward: it expects [[{"content": "..."}], ...]
         formatted_completions = [[{"content": output}] for output in base_llm_outputs]
         
-        rewards = accuracy_reward(formatted_completions, solution)
+        rewards = []
+        for i in range(len(formatted_completions)):
+            # Check if the solution is in the last 50 characters
+            if solution in base_llm_outputs[i][-50:]:
+                rewards.append(1.0)
+            else:
+                rewards.append(0.0)
         print("Rewards: ", rewards)
         return rewards

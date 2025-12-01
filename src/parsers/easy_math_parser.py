@@ -227,11 +227,7 @@ class EasyMathParser(BaseParser):
             if self.meta_prompt:
                 prompt_messages = [
                     {
-                        "content": self.meta_prompt,
-                        "role": "system"
-                    },
-                    {
-                        "content": question,
+                        "content": self.meta_prompt + "\n\n" + question,
                         "role": "user"
                     }
                 ]

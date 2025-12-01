@@ -245,7 +245,7 @@ def main():
             model=args.evaluator_model,
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
-            max_tokens=256,
+            max_tokens=1024,
             prefer_client=args.client_type
         )
     elif args.evaluator_type == "poem":
