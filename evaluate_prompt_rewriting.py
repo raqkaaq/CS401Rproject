@@ -402,7 +402,7 @@ def _evaluate_solution(
         evaluator: Evaluator instance
         generated_solution: The generated solution string
         sample: Sample dictionary containing gold solution
-        evaluator_type: Type of evaluator ("test", "math", "poem")
+        evaluator_type: Type of evaluator ("test", "math", "poem", "easy_math")
     
     Returns:
         Reward score (float)
@@ -454,6 +454,23 @@ def _evaluate_solution(
     elif evaluator_type == "test":
         # For test evaluator, use the evaluate method directly
         return evaluator.evaluate(generated_solution, **{k: v for k, v in sample.items() if k != "prompt"})
+    elif evaluator_type == "easy_math":
+        # For easy_math evaluator, check if solution is in the last 100 characters of output
+        # This matches the logic in EasyMathEvaluator.reward_function
+        solution = sample.get("solution", sample.get("answer", None))
+        if solution is None:
+            return 0.0
+        
+        # Handle empty generated solution
+        if not generated_solution or not isinstance(generated_solution, str) or not generated_solution.strip():
+            return 0.0
+        
+        # Check if solution is in the last half of the output
+        output_trimmed = generated_solution[len(generated_solution)//2:]
+        if isinstance(solution, str) and solution in output_trimmed:
+            return 1.0
+        else:
+            return 0.0
     else:
         # Default: return 0.0
         return 0.0
@@ -487,7 +504,7 @@ def run_evaluation(
         base_rewriter_model: Model identifier for base (pre-finetuned) rewriter model
         inference_model: Model identifier for inference (base LLM that solves the task)
         parser_type: Type of parser ("test", "math", "poem")
-        evaluator_type: Type of evaluator ("test", "math", "poem")
+        evaluator_type: Type of evaluator ("test", "math", "poem", "easy_math")
         num_test_samples: Number of test samples to evaluate (None = all)
         meta_prompt: Meta prompt to use for parsing
         dataset_name: Dataset name for parser (optional)
@@ -1098,7 +1115,7 @@ def _evaluate_solution(
         evaluator: Evaluator instance
         generated_solution: The generated solution string
         sample: Sample dictionary containing gold solution
-        evaluator_type: Type of evaluator ("test", "math", "poem")
+        evaluator_type: Type of evaluator ("test", "math", "poem", "easy_math")
     
     Returns:
         Reward score (float)
@@ -1150,6 +1167,23 @@ def _evaluate_solution(
     elif evaluator_type == "test":
         # For test evaluator, use the evaluate method directly
         return evaluator.evaluate(generated_solution, **{k: v for k, v in sample.items() if k != "prompt"})
+    elif evaluator_type == "easy_math":
+        # For easy_math evaluator, check if solution is in the last 100 characters of output
+        # This matches the logic in EasyMathEvaluator.reward_function
+        solution = sample.get("solution", sample.get("answer", None))
+        if solution is None:
+            return 0.0
+        
+        # Handle empty generated solution
+        if not generated_solution or not isinstance(generated_solution, str) or not generated_solution.strip():
+            return 0.0
+        
+        # Check if solution is in the last 100 characters of the output
+        output_trimmed = generated_solution[-100:]
+        if isinstance(solution, str) and solution in output_trimmed:
+            return 1.0
+        else:
+            return 0.0
     else:
         # Default: return 0.0
         return 0.0
