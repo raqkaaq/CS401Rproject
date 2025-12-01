@@ -62,7 +62,7 @@ class EasyMathEvaluator(BaseEvaluator):
             List of reward scores (floats).
         """
         # Get the solution/answer from kwargs (parser provides "solution" field)
-        solution = kwargs.get("solution", kwargs.get("solution", None))
+        solution = kwargs.get("solution", kwargs.get("answer", None))
         prompt_strings = []
 
         for rewritten_prompt in rewritten_prompts:
@@ -78,10 +78,27 @@ class EasyMathEvaluator(BaseEvaluator):
             else:
                 prompt_strings.append(str(rewritten_prompt))
         
-        for output in prompt_strings:
-            output_trimmed = output[-100:]
-            if solution in output_trimmed:
-                rewards.append(1.0)
+        # Batch inference - much faster than sequential calls
+        # Filter out 'prompts' from kwargs to avoid conflict with the prompts parameter
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'prompts'}
+        base_llm_outputs = self.pass_to_inference_batch(prompt_strings, **filtered_kwargs)
+        
+        rewards = []
+        for i in range(len(base_llm_outputs)):
+            # Handle batched solution data - get solution for this specific item
+            if isinstance(solution, list):
+                current_solution = solution[i] if i < len(solution) else None
+            else:
+                current_solution = solution
+            
+            # Check if solution is in the output (check last 100 characters)
+            if current_solution is not None:
+                output_trimmed = base_llm_outputs[i][-100:]
+                # Ensure both are strings for the 'in' operator
+                if isinstance(current_solution, str) and current_solution in output_trimmed:
+                    rewards.append(1.0)
+                else:
+                    rewards.append(0.0)
             else:
                 rewards.append(0.0)
         print("Rewards: ", rewards)
