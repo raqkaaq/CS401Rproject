@@ -4,7 +4,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=128G
-#SBATCH --time=36:00:00
+#SBATCH --time=24:00:00
 #SBATCH --output=grpo_%j.out
 #SBATCH --error=grpo_%j.err
 
@@ -156,15 +156,15 @@ accelerate launch --mixed_precision=bf16 src/main.py \
   --client-type hf \
   --output-dir ./easy_math_output \
   --num-epochs 10 \
-  --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Add instructions which would be helpful to solve the problem correctly, ensure you tell the model to put the solution at the end of its response. Output the new instruction only, and do not provide a solution." \
+  --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Add instructions which would be helpful to solve the problem correctly, ensure you tell the model to put the solution at the very very end of its response. Output the new instruction only, and do not provide a solution." \
   --learning-rate 5e-6 \
   --batch-size 8 \
   --num-samples 5000 \
-  --save-steps 25 \
+  --save-steps 50 \
   --max-prompt-length 700 \
   --max-completion-length 700 \
   --save-strategy steps \
-  --logging-steps 10
+  --logging-steps 25
 # Save options:
 #   --save-strategy steps --save-steps 500    # Save every 500 steps (current)
 #   --save-strategy epoch                     # Save at end of each epoch
