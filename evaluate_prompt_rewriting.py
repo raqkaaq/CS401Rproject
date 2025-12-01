@@ -260,7 +260,7 @@ def _get_model(model_or_wrapper):
 
 
 def generate_rewritten_prompt_batch(rewriter_client: HFClient, prompt_messages_list: List[List[Dict[str, str]]], 
-                                     max_tokens: int = 512) -> List[str]:
+                                     max_tokens: int = 1024) -> List[str]:
     """
     Generate rewritten prompts for multiple inputs in batch (much faster than sequential).
     
@@ -322,7 +322,7 @@ def generate_rewritten_prompt_batch(rewriter_client: HFClient, prompt_messages_l
 
 
 def generate_rewritten_prompt(rewriter_client: HFClient, prompt_messages: List[Dict[str, str]], 
-                              max_tokens: int = 512, max_retries: int = 3) -> str:
+                              max_tokens: int = 1024, max_retries: int = 3) -> str:
     """
     Use the model to rewrite a prompt with retry logic if output is empty.
     
@@ -467,7 +467,7 @@ def run_evaluation(
     meta_prompt: str = "",
     dataset_name: Optional[str] = None,
     rewriter_max_tokens: int = 512,
-    inference_max_tokens: int = 512,
+    inference_max_tokens: int = 1024,
     batch_size: int = 1,
     num_gpus: int = 1,
     output_file: Optional[str] = None,
@@ -1327,7 +1327,7 @@ def main():
     parser.add_argument(
         "--inference-max-tokens",
         type=int,
-        default=512,
+        default=1024,
         help="Maximum tokens for inference (task completion)"
     )
     

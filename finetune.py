@@ -134,7 +134,7 @@ class BaseTaskEvaluator:
         self.reward_mode = reward_mode
         self.reward_computer = RewardComputer(reward_mode)
     @abstractmethod
-    def generate(self, prompt: str, max_tokens: int = 512) -> str: raise NotImplementedError
+    def generate(self, prompt: str, max_tokens: int = 1024) -> str: raise NotImplementedError
     def score(self, example: dict, rewritten_instruction: str) -> float:
         if isinstance(example, dict):
             question = example.get("question") or example.get("instruction", "")
@@ -145,7 +145,7 @@ class BaseTaskEvaluator:
                 task_prompt = f"{rewritten_instruction}\n\nQuestion:\n{question}"
         else:
             task_prompt = example.build_task_prompt(rewritten_instruction)
-        out = self.generate(task_prompt, max_tokens=512)
+        out = self.generate(task_prompt, max_tokens=1024)
         return self.reward_computer.compute_reward(example, out)
 
 class OllamaTaskEvaluator(BaseTaskEvaluator):
@@ -154,7 +154,7 @@ class OllamaTaskEvaluator(BaseTaskEvaluator):
         self.model=model
         self.client=client
         self.client.warmup_model(model)
-    def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 512) -> str:
+    def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 1024) -> str:
         return self.client.generate(self.model, prompt, temperature=temperature, max_tokens=max_tokens)
 
 class HFTaskEvaluator(BaseTaskEvaluator):
@@ -163,7 +163,7 @@ class HFTaskEvaluator(BaseTaskEvaluator):
         self.model=model
         self.client=client
         self.client.warmup_model(model)
-    def generate(self, prompt: str, max_tokens: int = 512) -> str:
+    def generate(self, prompt: str, max_tokens: int = 1024) -> str:
         return self.client.generate(self.model, prompt, max_new_tokens=max_tokens)
 
 # ---------------- Reward Model -----------------
