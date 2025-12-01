@@ -223,7 +223,7 @@ class EasyMathParser(BaseParser):
             if solution_match:
                 # Wrap numeric solution in \boxed{} for proper LaTeX parsing by accuracy_reward
                 # This ensures math_verify can parse and verify the solution correctly
-                solution_number = "$" + solution_match.group(1) + "$"
+                solution_number = solution_match.group(1)
 
             # Build prompt messages with optional meta prompt
             if self.meta_prompt:

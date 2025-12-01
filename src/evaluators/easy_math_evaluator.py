@@ -64,7 +64,7 @@ class EasyMathEvaluator(BaseEvaluator):
         # Get the solution/answer from kwargs (parser provides "solution" field)
         solution = kwargs.get("solution", kwargs.get("solution", None))
         prompt_strings = []
-        
+
         for rewritten_prompt in rewritten_prompts:
             # Handle both string format and list-of-dicts format
             if isinstance(rewritten_prompt, str):
@@ -78,10 +78,11 @@ class EasyMathEvaluator(BaseEvaluator):
             else:
                 prompt_strings.append(str(rewritten_prompt))
         
-        # Batch inference - much faster than sequential calls
-        filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'prompts'}
-        base_llm_outputs = self.pass_to_inference_batch(prompt_strings, **filtered_kwargs)
-        formatted_completions = [[{"content": output}] for output in base_llm_outputs]
-        rewards = accuracy_reward(formatted_completions, solution)
+        for output in prompt_strings:
+            output_trimmed = output[-100:]
+            if solution in output_trimmed:
+                rewards.append(1.0)
+            else:
+                rewards.append(0.0)
         print("Rewards: ", rewards)
         return rewards
