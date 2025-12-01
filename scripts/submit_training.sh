@@ -150,13 +150,13 @@ echo "Working directory: $(pwd)"
 # Explicitly set mixed precision to bf16 for GPU training (H200/H100/A100 support bf16)
 accelerate launch --mixed_precision=bf16 src/main.py \
   --model Qwen/Qwen2.5-0.5B-Instruct \
-  --parser-type math \
-  --evaluator-type math \
-  --evaluator-model Qwen/Qwen2.5-7B-Instruct \
+  --parser-type easy_math \
+  --evaluator-type easy_math \
+  --evaluator-model Qwen/Qwen2.5-0.5B-Instruct \
   --client-type hf \
-  --output-dir ./new_math_output \
+  --output-dir ./easy_math_output \
   --num-epochs 10 \
-  --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements." \
+  --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Add instructions which would be helpful to solve the problem correctly. Output the new instruction only." \
   --learning-rate 5e-6 \
   --batch-size 8 \
   --num-samples 5000 \

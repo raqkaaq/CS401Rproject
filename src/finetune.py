@@ -70,22 +70,54 @@ class Finetune:
             # Extract content strings from GRPOTrainer's format
             completion_contents = [completion[0]["content"] for completion in completions]
             
-            # Print the finetuned prompt outputs (completions)
+            # Generate base LLM outputs (completions) for each finetuned prompt
+            # Filter out 'prompts' from kwargs to avoid conflict
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'prompts'}
+            base_llm_outputs = self.evaluator.pass_to_inference_batch(completion_contents, **filtered_kwargs)
+            
+            # Extract solutions from kwargs (handle batched data)
+            solutions = []
+            if "solution" in kwargs:
+                solution_value = kwargs["solution"]
+                if isinstance(solution_value, list):
+                    solutions = solution_value
+                else:
+                    # If not a list, use the same value for all
+                    solutions = [solution_value] * len(completion_contents)
+            else:
+                # Try to find solution in other possible keys
+                solution_keys = ["answer", "gold", "output"]
+                for key in solution_keys:
+                    if key in kwargs:
+                        solution_value = kwargs[key]
+                        if isinstance(solution_value, list):
+                            solutions = solution_value
+                        else:
+                            solutions = [solution_value] * len(completion_contents)
+                        break
+                if not solutions:
+                    solutions = ["N/A"] * len(completion_contents)
+            
+            # Print for each output: finetuned-prompt, completion, solution
             print("\n" + "="*80)
-            print("FINETUNED PROMPT OUTPUTS (Training Step)")
+            print(f"OUTPUTS (Training Step) - {len(completion_contents)} samples")
             print("="*80)
-            for i, completion_content in enumerate(completion_contents):
-                if i == 0:
-                    print(f"\n[Completion {i+1}/{len(completion_contents)}]")
-                    print("-" * 80)
-                    print("Rewritten prompt (what inference model will receive):")
-                    print(completion_content)
-                    print("-" * 80)
-                    # Also print kwargs to see what other data is available
-                    if i == 0:  # Only print once to avoid spam
-                        print(f"Available kwargs keys: {list(kwargs.keys())}")
-                        if "solution" in kwargs:
-                            print(f"Sample solution: {kwargs['solution']}")
+            for i in range(len(completion_contents)):
+                print(f"\n[Output {i+1}/{len(completion_contents)}]")
+                if "original_question" in kwargs:
+                    print(f"Original question: {kwargs['original_question'][i]}")
+                else:
+                    print("Original question not found in kwargs")
+                print("-" * 80)
+                print("Finetuned-prompt:")
+                print(completion_contents[i])
+                print("-" * 80)
+                print("Completion (base LLM output):")
+                print(base_llm_outputs[i])
+                print("-" * 80)
+                print("Solution:")
+                print(solutions[i] if i < len(solutions) else "N/A")
+                print("-" * 80)
             print("="*80 + "\n")
             
             # Call the evaluator's reward_function

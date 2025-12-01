@@ -67,6 +67,7 @@ echo ""
 download_dataset "trl-lib/DeepMath-103K" "train"
 download_dataset "checkai/instruction-poems" "train"
 download_dataset "sh0416/ag_news" "train"
+download_dataset "openai/gsm8k" "train"
 
 echo ""
 echo "=== Download Complete ==="

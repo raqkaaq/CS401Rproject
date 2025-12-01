@@ -172,14 +172,6 @@ class BaseEvaluator(ABC):
             else:
                 completion_strings.append(str(completion))
         
-        # Log first rewritten prompt (completion from rewriter)
-        if completion_strings:
-            print("\n" + "="*80)
-            print("FIRST REWRITTEN PROMPT (from rewriter):")
-            print("="*80)
-            print(completion_strings[0])
-            print("="*80 + "\n")
-        
         rewards = []
         for i, completion_string in enumerate(completion_strings):
             base_llm_output = self.pass_to_inference(completion_string, **kwargs)
