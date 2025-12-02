@@ -9,7 +9,7 @@ class MathEvaluator(BaseEvaluator):
     """
     
     def __init__(self, model: str, client=None, temperature: float = 0.0, max_tokens: int = 256,
-                 prefer_client: str = "auto", evaluator_8bit: bool = False):
+                 prefer_client: str = "auto"):
         """
         Initialize the math evaluator.
         
@@ -19,9 +19,8 @@ class MathEvaluator(BaseEvaluator):
             temperature: Temperature for generation
             max_tokens: Maximum tokens for generation
             prefer_client: Client preference ("auto", "ollama", or "hf")
-            evaluator_8bit: If True, use 8-bit quantization for HFClient (reduces memory usage)
         """
-        super().__init__(model, client, temperature, max_tokens, prefer_client=prefer_client, evaluator_8bit=evaluator_8bit)
+        super().__init__(model, client, temperature, max_tokens, prefer_client=prefer_client)
 
     def evaluate(self, base_llm_output: str, **kwargs) -> float:
         """
@@ -68,13 +67,6 @@ class MathEvaluator(BaseEvaluator):
         # Format completions for accuracy_reward: it expects [[{"content": "..."}], ...]
         formatted_completions = [[{"content": output}] for output in base_llm_outputs]
         
-        rewards = []
-        for i in range(len(formatted_completions)):
-            # Check if the solution is in the last 50 characters
-            base_llm_half_size = len(base_llm_outputs[i]) // 2
-            if solution in base_llm_outputs[i][base_llm_half_size:]:
-                rewards.append(1.0)
-            else:
-                rewards.append(0.0)
+        rewards = accuracy_reward(formatted_completions, solution)
         print("Rewards: ", rewards)
         return rewards
