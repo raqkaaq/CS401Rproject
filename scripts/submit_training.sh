@@ -156,13 +156,13 @@ accelerate launch --mixed_precision=bf16 src/main.py \
   --client-type hf \
   --output-dir ./classification_4B05B_output \
   --num-epochs 3 \
-  --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Add instructions which would be helpful to solve the problem correctly, ensure you tell the model to put the solution at the end of its response. Output the new instruction only, and do not provide a solution." \
+  --meta-prompt "Rewrite the following instruction via rephrasing and/or adding specific requirements. Add instructions which would be helpful to classify the article correctly, ensure you tell the model to put the classification at the end of its response. Output the new instruction only, and do not provide the classification directly." \
   --learning-rate 5e-6 \
   --batch-size 8 \
   --num-samples 5000 \
   --save-steps 50 \
-  --max-prompt-length 1700 \
-  --max-completion-length 1700 \
+  --max-prompt-length 512 \
+  --max-completion-length 256 \
   --save-strategy steps \
   --logging-steps 25
 # Save options:
