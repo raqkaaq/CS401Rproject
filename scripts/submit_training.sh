@@ -4,7 +4,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=128G
-#SBATCH --time=06:00:00
+#SBATCH --time=10:00:00
 #SBATCH --output=grpo_%j.out
 #SBATCH --error=grpo_%j.err
 
@@ -152,7 +152,7 @@ accelerate launch --mixed_precision=bf16 src/main.py \
   --model Qwen/Qwen3-4B-Instruct-2507 \
   --parser-type classification \
   --evaluator-type classification \
-  --evaluator-model Qwen/Qwen3-0.5B-Instruct \
+  --evaluator-model Qwen/Qwen2.5-0.5B-Instruct \
   --client-type hf \
   --output-dir ./classification_4B05B_output \
   --num-epochs 3 \
