@@ -250,8 +250,7 @@ def main():
             client=None,  # Will auto-detect based on prefer_client
             temperature=0.0,
             max_tokens=int(args.max_prompt_length),
-            prefer_client=args.client_type,
-            evaluator_8bit=args.evaluator_8bit
+            prefer_client=args.client_type
         )
     elif args.evaluator_type == "easy_math":
         evaluator_instance = EasyMathEvaluator(
