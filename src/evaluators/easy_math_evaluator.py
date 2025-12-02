@@ -93,7 +93,7 @@ class EasyMathEvaluator(BaseEvaluator):
             
             # Check if solution is in the output (check last 100 characters)
             if current_solution is not None:
-                output_trimmed = base_llm_outputs[i][-100:]
+                output_trimmed = base_llm_outputs[i][-50:]
                 # Ensure both are strings for the 'in' operator
                 if isinstance(current_solution, str) and current_solution in output_trimmed:
                     rewards.append(1.0)
